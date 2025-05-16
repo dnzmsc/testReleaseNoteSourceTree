@@ -49,6 +49,13 @@ def validate_and_save():
 root = tk.Tk()
 root.title("Compila Release Notes")
 
+# --- Forza la finestra in primo piano (macOS, Windows, Linux) ---
+root.update_idletasks()
+root.lift()
+root.attributes('-topmost', True)
+root.after_idle(lambda: root.attributes('-topmost', False))
+
+# --- Costruzione interfaccia ---
 tipo_var = tk.StringVar()
 tk.Label(root, text="Tipo (Feature/Fix/Refactor):").pack()
 tk.OptionMenu(root, tipo_var, "Feature", "Fix", "Refactor").pack()
@@ -75,4 +82,6 @@ changelog_text.pack()
 
 tk.Button(root, text="Salva", command=validate_and_save).pack(pady=10)
 
+# --- Avvio della GUI ---
 root.mainloop()
+
