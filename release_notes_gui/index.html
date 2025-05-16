@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>Release Notes</title>
+  <style>
+    body { font-family: sans-serif; padding: 20px; }
+    label, input, textarea { display: block; margin: 10px 0; width: 100%; }
+    button { padding: 10px 20px; }
+  </style>
+</head>
+<body>
+  <h2>Compila le Release Notes</h2>
+  <label>Versione:</label>
+  <input type="text" id="version" />
+
+  <label>Descrizione:</label>
+  <textarea id="description" rows="6"></textarea>
+
+  <button onclick="submit()">Salva</button>
+
+  <script>
+    const { ipcRenderer } = require('electron');
+
+    function submit() {
+      const version = document.getElementById('version').value.trim();
+      const description = document.getElementById('description').value.trim();
+      
+      if (!version || !description) {
+        alert("Tutti i campi sono obbligatori.");
+        return;
+      }
+
+      ipcRenderer.send('save-release-notes', { version, description });
+    }
+  </script>
+</body>
+</html>
