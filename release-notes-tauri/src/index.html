@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="it">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Release Notes</title>
+    <script type="module" src="./main.js"></script>
+    <style>
+      body { font-family: sans-serif; padding: 20px; max-width: 600px; margin: auto; }
+      label, input, textarea, select { display: block; margin: 10px 0; width: 100%; padding: 8px; }
+      button { padding: 10px 20px; font-size: 16px; margin-top: 20px; }
+    </style>
+  </head>
+  <body>
+    <h2>Compila Release Note</h2>
+
+    <label>Tipo:</label>
+    <select id="tipo">
+      <option value="">-- Seleziona --</option>
+      <option value="Feature">Feature</option>
+      <option value="Fix">Fix</option>
+      <option value="Refactor">Refactor</option>
+    </select>
+
+    <label>Titolo:</label>
+    <input type="text" id="titolo" />
+
+    <label>Descrizione:</label>
+    <textarea id="descrizione"></textarea>
+
+    <label>Autore:</label>
+    <input type="text" id="autore" />
+
+    <label>PR (es: PR1234):</label>
+    <input type="text" id="pr" />
+
+    <label>Changelog:</label>
+    <textarea id="changelog"></textarea>
+
+    <button id="salva">Salva</button>
+  </body>
+</html>
