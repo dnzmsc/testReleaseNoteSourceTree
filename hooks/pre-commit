@@ -1,42 +1,29 @@
 #!/bin/bash
 
-OS="$(uname)"
-APP=""
+SCRIPT="release_notes_form/release_notes_gui.py"
+FILE="release_notes.json"
 
-case "$OS" in
-  Darwin*)
-    ARCH="$(uname -m)"
-    if [[ "$ARCH" == "arm64" ]]; then
-      APP="./ReleaseNotesApp/ReleaseNotes-darwin-arm64/ReleaseNotes.app/Contents/MacOS/ReleaseNotes"
-    else
-      APP="./ReleaseNotesApp/ReleaseNotes-darwin-x64/ReleaseNotes.app/Contents/MacOS/ReleaseNotes"
-    fi
-    ;;
-  Linux*)
-    APP="./ReleaseNotesApp/ReleaseNotes-linux-x64/ReleaseNotes"
-    ;;
-  MINGW*|CYGWIN*|MSYS*)
-    APP="./ReleaseNotesApp/ReleaseNotes-win32-x64/ReleaseNotes.exe"
-    ;;
-  *)
-    echo "Sistema operativo non supportato"
-    exit 1
-    ;;
-esac
+# Avvia la GUI Python
+python3 "$SCRIPT"
 
-# Avvia l'app e aspetta che termini
-"$APP"
-
-# Verifica file release_notes.json nella root repo
-NOTES_FILE="release_notes.json"
-
-if [ ! -f "$NOTES_FILE" ]; then
-  echo "❌ Release notes mancanti. Commit annullato."
+# Verifica presenza file
+if [ ! -f "$FILE" ]; then
+  echo "❌ File release_notes.json mancante."
   exit 1
 fi
 
-git add "$NOTES_FILE"
+# Verifica data dell'ultima release
+LAST_DATE=$(python3 -c "
+import json
+with open('$FILE') as f:
+    data = json.load(f)
+print(data['releases'][-1]['data'])
+")
 
-echo "✅ Release notes compilate e aggiunte. Commit consentito."
+if [ "$LAST_DATE" == "1970-01-01" ] || [ -z "$LAST_DATE" ]; then
+  echo "❌ Data non valida nella release note ($LAST_DATE). Commit annullato."
+  exit 1
+fi
 
-exit 0
+git add "$FILE"
+echo "✅ Release note OK e aggiunta al commit."

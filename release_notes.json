@@ -1,0 +1,13 @@
+{
+  "releases": [
+    {
+      "data": "2025-05-16",
+      "tipo": "Fix",
+      "titolo": "prova",
+      "descrizione": "C'era una volta",
+      "autore": "giovanni",
+      "pr": "PR120",
+      "changelog": "asdadad"
+    }
+  ]
+}
