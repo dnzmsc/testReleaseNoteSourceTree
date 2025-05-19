@@ -26,6 +26,15 @@
       "autore": "asdada",
       "pr": "PR123",
       "changelog": ""
+    },
+    {
+      "data": "2025-05-19",
+      "tipo": "Feature",
+      "titolo": "animali da compagnia",
+      "descrizione": "asdasdadasdasdasdasdadadas",
+      "autore": "asdasdasd",
+      "pr": "PR1234",
+      "changelog": ""
     }
   ]
 }
