@@ -8,6 +8,24 @@
       "autore": "giovanni",
       "pr": "PR120",
       "changelog": "asdadad"
+    },
+    {
+      "data": "2025-05-19",
+      "tipo": "Feature",
+      "titolo": "asdada",
+      "descrizione": "asdasdaasdadadadsad",
+      "autore": "asdasdsa",
+      "pr": "PR12345",
+      "changelog": ""
+    },
+    {
+      "data": "2025-05-19",
+      "tipo": "Feature",
+      "titolo": "prova",
+      "descrizione": "asdadadasdadasdada",
+      "autore": "asdada",
+      "pr": "PR123",
+      "changelog": ""
     }
   ]
 }
