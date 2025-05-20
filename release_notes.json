@@ -44,6 +44,15 @@
       "autore": "sfsfsdfs",
       "pr": "PR12234",
       "changelog": "asdadasdas"
+    },
+    {
+      "data": "2025-05-20",
+      "tipo": "Fix",
+      "titolo": "asdad",
+      "descrizione": "asdasdasdadasdasda",
+      "autore": "asdasdad",
+      "pr": "PR123",
+      "changelog": ""
     }
   ]
 }
