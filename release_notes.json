@@ -53,6 +53,15 @@
       "autore": "asdasdad",
       "pr": "PR123",
       "changelog": ""
+    },
+    {
+      "data": "2025-05-20",
+      "tipo": "Fix",
+      "titolo": "asdasdasda",
+      "descrizione": "asdasdadsadasdasada",
+      "autore": "asdasdasdas",
+      "pr": "PR123",
+      "changelog": ""
     }
   ]
 }
