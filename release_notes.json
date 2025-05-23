@@ -80,6 +80,15 @@
       "autore": "adsdada",
       "pr": "PR12234",
       "changelog": ""
+    },
+    {
+      "data": "2025-05-23",
+      "tipo": "Fix",
+      "titolo": "asdada",
+      "descrizione": "asdasdadaadadadadasdasdasd",
+      "autore": "asdasdasdasdasdasdasdasda",
+      "pr": "PR1999999",
+      "changelog": ""
     }
   ]
 }
