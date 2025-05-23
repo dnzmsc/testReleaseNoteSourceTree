@@ -71,6 +71,15 @@
       "autore": "hkjhkjh",
       "pr": "PR1111",
       "changelog": ""
+    },
+    {
+      "data": "2025-05-23",
+      "tipo": "Feature",
+      "titolo": "asdasdada",
+      "descrizione": "qeqeqadadadadas",
+      "autore": "adsdada",
+      "pr": "PR12234",
+      "changelog": ""
     }
   ]
 }
