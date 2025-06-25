@@ -3,92 +3,164 @@
     {
       "data": "2025-05-16",
       "tipo": "Fix",
+      "modulo": "",
       "titolo": "prova",
       "descrizione": "C'era una volta",
-      "autore": "giovanni",
-      "pr": "PR120",
-      "changelog": "asdadad"
+      "commitAuthor": "",
+      "commitDesc": "",
+      "commitDate": "",
+      "excludedFromReleaseNote": false
     },
     {
       "data": "2025-05-19",
       "tipo": "Feature",
+      "modulo": "",
       "titolo": "asdada",
       "descrizione": "asdasdaasdadadadsad",
-      "autore": "asdasdsa",
-      "pr": "PR12345",
-      "changelog": ""
+      "commitAuthor": "",
+      "commitDesc": "",
+      "commitDate": "",
+      "excludedFromReleaseNote": false
     },
     {
       "data": "2025-05-19",
       "tipo": "Feature",
+      "modulo": "",
       "titolo": "prova",
       "descrizione": "asdadadasdadasdada",
-      "autore": "asdada",
-      "pr": "PR123",
-      "changelog": ""
+      "commitAuthor": "",
+      "commitDesc": "",
+      "commitDate": "",
+      "excludedFromReleaseNote": false
     },
     {
       "data": "2025-05-19",
       "tipo": "Feature",
+      "modulo": "",
       "titolo": "animali da compagnia",
       "descrizione": "asdasdadasdasdasdasdadadas",
-      "autore": "asdasdasd",
-      "pr": "PR1234",
-      "changelog": ""
+      "commitAuthor": "",
+      "commitDesc": "",
+      "commitDate": "",
+      "excludedFromReleaseNote": false
     },
     {
       "data": "2025-05-20",
       "tipo": "Feature",
+      "modulo": "",
       "titolo": "bfdgd",
       "descrizione": "dfgdgdfgdwwewwrwe",
-      "autore": "sfsfsdfs",
-      "pr": "PR12234",
-      "changelog": "asdadasdas"
+      "commitAuthor": "",
+      "commitDesc": "",
+      "commitDate": "",
+      "excludedFromReleaseNote": false
     },
     {
       "data": "2025-05-20",
       "tipo": "Fix",
+      "modulo": "",
       "titolo": "asdad",
       "descrizione": "asdasdasdadasdasda",
-      "autore": "asdasdad",
-      "pr": "PR123",
-      "changelog": ""
+      "commitAuthor": "",
+      "commitDesc": "",
+      "commitDate": "",
+      "excludedFromReleaseNote": false
     },
     {
       "data": "2025-05-20",
       "tipo": "Fix",
+      "modulo": "",
       "titolo": "asdasdasda",
       "descrizione": "asdasdadsadasdasada",
-      "autore": "asdasdasdas",
-      "pr": "PR123",
-      "changelog": ""
+      "commitAuthor": "",
+      "commitDesc": "",
+      "commitDate": "",
+      "excludedFromReleaseNote": false
     },
     {
       "data": "2025-05-23",
       "tipo": "Refactor",
+      "modulo": "",
       "titolo": "tytytytuytuyt",
       "descrizione": "asererererererererere",
-      "autore": "hkjhkjh",
-      "pr": "PR1111",
-      "changelog": ""
+      "commitAuthor": "",
+      "commitDesc": "",
+      "commitDate": "",
+      "excludedFromReleaseNote": false
     },
     {
       "data": "2025-05-23",
       "tipo": "Feature",
+      "modulo": "",
       "titolo": "asdasdada",
       "descrizione": "qeqeqadadadadas",
-      "autore": "adsdada",
-      "pr": "PR12234",
-      "changelog": ""
+      "commitAuthor": "",
+      "commitDesc": "",
+      "commitDate": "",
+      "excludedFromReleaseNote": false
     },
     {
       "data": "2025-05-23",
       "tipo": "Fix",
+      "modulo": "",
       "titolo": "asdada",
       "descrizione": "asdasdadaadadadadasdasdasd",
-      "autore": "asdasdasdasdasdasdasdasda",
-      "pr": "PR1999999",
-      "changelog": ""
+      "commitAuthor": "",
+      "commitDesc": "",
+      "commitDate": "",
+      "excludedFromReleaseNote": false
+    },
+    {
+      "data": "2025-06-25",
+      "tipo": "Feature",
+      "modulo": "CATALOG",
+      "titolo": "Primo",
+      "descrizione": "Provetta provina Provetta provina Provetta provina Provetta provina Provetta provina Provetta provina",
+      "internalTicket": "12312314",
+      "clientTicket": "12312312",
+      "commitAuthor": "Mario Rossi",
+      "commitDesc": "Implementazione nuova funzionalità di login con autenticazione a due fattori e risoluzione bug #123.",
+      "commitDate": "2025-06-25 17:10:36 +0200",
+      "excludedFromReleaseNote": false
+    },
+    {
+      "data": "2025-06-25",
+      "tipo": "Fix",
+      "modulo": "CASE",
+      "titolo": "prova 2",
+      "descrizione": "asdadadaasdadadaasdadadaasdadadaasdadadaasdadadaasdadada",
+      "internalTicket": "111111",
+      "clientTicket": "2222222",
+      "commitAuthor": "Mario Rossi",
+      "commitDesc": "Implementazione nuova funzionalità di login con autenticazione a due fattori e risoluzione bug #123.",
+      "commitDate": "2025-06-25 17:10:36 +0200",
+      "excludedFromReleaseNote": false
+    },
+    {
+      "data": "2025-06-25",
+      "tipo": "Docs",
+      "modulo": "CATALOG",
+      "titolo": "test1",
+      "descrizione": "la vispa teresa la vispa teresa la vispa teresa la vispa teresa la vispa teresa la vispa teresa",
+      "internalTicket": "1212",
+      "clientTicket": "2323",
+      "commitAuthor": "cammoranesi",
+      "commitDesc": "asdasdad",
+      "commitDate": "2025-05-23 16:08:54 +0200",
+      "excludedFromReleaseNote": false
+    },
+    {
+      "data": "2025-06-25",
+      "tipo": "Docs",
+      "modulo": "CATALOG",
+      "titolo": "test1",
+      "descrizione": "la vispa teresa la vispa teresa la vispa teresa la vispa teresa la vispa teresa la vispa teresa",
+      "internalTicket": "1212",
+      "clientTicket": "2323",
+      "commitAuthor": "cammoranesi",
+      "commitDesc": "asdasdad",
+      "commitDate": "2025-05-23 16:08:54 +0200",
+      "excludedFromReleaseNote": false
     }
   ]
 }
