@@ -1,0 +1,313 @@
+package main
+
+import (
+	"encoding/json"
+	"fmt"
+	"os"
+	"os/exec"
+	"strings"
+	"time"
+
+	"fyne.io/fyne/v2"
+	"fyne.io/fyne/v2/app"
+	"fyne.io/fyne/v2/container"
+	"fyne.io/fyne/v2/dialog"
+	"fyne.io/fyne/v2/widget"
+)
+
+// Release rappresenta la struttura di una singola nota di rilascio.
+type Release struct {
+	Data                    string `json:"data"`
+	Tipo                    string `json:"tipo"`
+	Modulo                  string `json:"modulo"`
+	Titolo                  string `json:"titolo,omitempty"`
+	Descrizione             string `json:"descrizione"`
+	InternalTicket          string `json:"internalTicket,omitempty"`
+	ClientTicket            string `json:"clientTicket,omitempty"`
+	CommitAuthor            string `json:"commitAuthor"`
+	CommitDesc              string `json:"commitDesc"`
+	CommitDate              string `json:"commitDate"`
+	ExcludedFromReleaseNote bool   `json:"excludedFromReleaseNote"`
+}
+
+// ReleaseFile è la struttura per il file JSON che contiene tutte le release.
+type ReleaseFile struct {
+	Releases []Release `json:"releases"`
+}
+
+// loadModules carica i moduli da un file JSON esterno.
+func loadModules(filePath string) ([]string, error) {
+	content, err := os.ReadFile(filePath)
+	if err != nil {
+		return nil, fmt.Errorf("errore nella lettura del file moduli: %w", err)
+	}
+
+	var modules []string
+	err = json.Unmarshal(content, &modules)
+	if err != nil {
+		return nil, fmt.Errorf("errore nel parsing del file moduli: %w", err)
+	}
+	return modules, nil
+}
+
+// getGitData recupera i dati rilevanti per il commit attuale.
+// commitMsgFilePath è il percorso al file temporaneo di Git contenente il messaggio.
+func getGitData(commitMsgFilePath string) (author, description, date string, err error) {
+	cmdAuthor := exec.Command("git", "config", "user.name")
+	outAuthor, err := cmdAuthor.Output()
+	if err != nil {
+		author = os.Getenv("USER")
+		if author == "" {
+			author = os.Getenv("USERNAME")
+		}
+		if author == "" {
+			author = "Sconosciuto"
+		}
+		fmt.Printf("Avviso: Impossibile ottenere user.name da Git (%v). Usando l'utente di sistema: %s\n", err, author)
+	} else {
+		author = strings.TrimSpace(string(outAuthor))
+	}
+
+	commitMsgContent, err := os.ReadFile(commitMsgFilePath)
+	if err != nil {
+		return "", "", "", fmt.Errorf("errore nella lettura del file del messaggio di commit (%s): %w", commitMsgFilePath, err)
+	}
+	lines := strings.Split(string(commitMsgContent), "\n")
+	var cleanedDescription []string
+	for _, line := range lines {
+		trimmedLine := strings.TrimSpace(line)
+		if !strings.HasPrefix(trimmedLine, "#") && trimmedLine != "" {
+			cleanedDescription = append(cleanedDescription, line)
+		}
+	}
+	description = strings.TrimSpace(strings.Join(cleanedDescription, "\n"))
+
+	date = time.Now().Format("2006-01-02 15:04:05 -0700")
+
+	return author, description, date, nil
+}
+
+func main() {
+	a := app.New()
+	// Aumenta le dimensioni della finestra per accogliere più contenuto e padding
+	// Regolata per evitare la scrollbar verticale inizialmente
+	w := a.NewWindow("Generatore Note di Rilascio")
+	w.Resize(fyne.NewSize(700, 900))
+
+	if len(os.Args) < 2 {
+		dialog.ShowError(fmt.Errorf("Questa applicazione deve essere eseguita come un hook 'prepare-commit-msg' e necessita del percorso del file del messaggio di commit come argomento."), w)
+		return
+	}
+	commitMsgFilePath := os.Args[1]
+
+	modules, err := loadModules("modules.json")
+	if err != nil {
+		dialog.ShowError(fmt.Errorf("Errore nel caricamento dei moduli: %v", err), w) // Tradotto
+		return
+	}
+
+	commitAuthor, commitDesc, commitDate, err := getGitData(commitMsgFilePath)
+	if err != nil {
+		dialog.ShowError(fmt.Errorf("Impossibile recuperare i dati del commit attuale. Assicurati di eseguire l'applicazione in un repository Git valido. Errore: %v", err), w)
+		return
+	}
+
+	// Campi del form
+	excludedFromReleaseNote := widget.NewCheck("Escludi dalla Nota di Rilascio", nil) // Tradotto
+
+	// Tipi: cambiato "Chore" in "Generico" e aggiunto come opzione
+	tipi := []string{"Funzionalità", "Correzione Bug", "Refactoring", "Documentazione", "Generico"}
+	tipo := widget.NewSelect(tipi, nil)
+
+	modulo := widget.NewSelect(modules, nil)
+	titolo := widget.NewEntry()
+	descrizione := widget.NewMultiLineEntry()
+	internalTicket := widget.NewEntry()
+	clientTicket := widget.NewEntry()
+
+	// Label per la descrizione che cambia dinamicamente
+	descrizioneLabel := widget.NewLabel("Descrizione (min. 20 caratteri):")
+
+	// Campo modificabile per il messaggio di commit
+	commitDescEntry := widget.NewMultiLineEntry()
+	commitDescEntry.SetText(commitDesc) // Inizializza con il messaggio ereditato
+
+	// Listener per il checkbox excludedFromReleaseNote
+	excludedFromReleaseNote.OnChanged = func(checked bool) {
+		if checked {
+			descrizioneLabel.SetText("Descrizione:") // Rimuove il limite visivo
+			// Modulo e Tipo non sono più obbligatori se escluso
+			// Non disabilitiamo i campi, solo le validazioni
+			tipo.ClearSelected() // Svuota la selezione se diventa non obbligatorio
+			modulo.ClearSelected()
+		} else {
+			descrizioneLabel.SetText("Descrizione (min. 20 caratteri):") // Ripristina il limite visivo
+			tipo.SetSelected("Generico")                                 // Imposta default se torna obbligatorio
+		}
+		descrizioneLabel.Refresh()
+	}
+
+	commitAuthorLabel := widget.NewLabel(fmt.Sprintf("Autore Commit: %s", commitAuthor))
+	commitDateLabel := widget.NewLabel(fmt.Sprintf("Data Commit: %s", commitDate))
+
+	var atLeastOneNoteSaved bool
+	var currentNoteSaved bool
+
+	resetForm := func() {
+		tipo.SetSelected("Generico") // Default a "Generico"
+		modulo.SetSelected("")
+		titolo.SetText("")
+		descrizione.SetText("")
+		internalTicket.SetText("")
+		clientTicket.SetText("")
+		excludedFromReleaseNote.SetChecked(false)
+		currentNoteSaved = false
+	}
+
+	saveNote := func() {
+		if currentNoteSaved {
+			dialog.ShowInformation("Attenzione", "Questa nota è già stata salvata. Inserisci una nuova nota o chiudi.", w) // Tradotto
+			return
+		}
+
+		isExcluded := excludedFromReleaseNote.Checked
+
+		// Validazioni condizionali
+		if !isExcluded {
+			if tipo.Selected == "" {
+				dialog.ShowError(fmt.Errorf("Tipo non selezionato."), w) // Tradotto
+				return
+			}
+			if modulo.Selected == "" {
+				dialog.ShowError(fmt.Errorf("Modulo non selezionato."), w) // Tradotto
+				return
+			}
+			if len(descrizione.Text) < 20 {
+				dialog.ShowError(fmt.Errorf("Descrizione troppo corta (minimo 20 caratteri)."), w) // Tradotto
+				return
+			}
+		} else { // Se è esclusa, controlla solo che la descrizione non sia vuota
+			if strings.TrimSpace(descrizione.Text) == "" {
+				dialog.ShowError(fmt.Errorf("La Descrizione non può essere vuota, anche se la nota è esclusa dalla Release Note."), w) // Tradotto
+				return
+			}
+		}
+
+		release := Release{
+			Data:                    time.Now().Format("2006-01-02"),
+			Tipo:                    tipo.Selected,
+			Modulo:                  modulo.Selected,
+			Titolo:                  strings.TrimSpace(titolo.Text),
+			Descrizione:             strings.TrimSpace(descrizione.Text),
+			InternalTicket:          strings.TrimSpace(internalTicket.Text),
+			ClientTicket:            strings.TrimSpace(clientTicket.Text),
+			CommitAuthor:            commitAuthor,
+			CommitDesc:              strings.TrimSpace(commitDescEntry.Text), // Usa il testo modificabile
+			CommitDate:              commitDate,
+			ExcludedFromReleaseNote: isExcluded,
+		}
+
+		filePath := "release_notes.json"
+		var relFile ReleaseFile
+
+		if content, err := os.ReadFile(filePath); err == nil {
+			_ = json.Unmarshal(content, &relFile)
+		}
+
+		relFile.Releases = append(relFile.Releases, release)
+
+		if out, err := json.MarshalIndent(relFile, "", "  "); err == nil {
+			os.WriteFile(filePath, out, 0644)
+			atLeastOneNoteSaved = true
+			currentNoteSaved = true
+			dialog.ShowInformation("Successo", "Release salvata correttamente!", w) // Tradotto
+		} else {
+			dialog.ShowError(fmt.Errorf("Errore nel salvataggio della release: %v", err), w) // Tradotto
+		}
+	}
+
+	saveBtn := widget.NewButton("Salva", func() {
+		saveNote()
+	})
+
+	addNoteBtn := widget.NewButton("Aggiungi Nuova Nota", func() { // Tradotto
+		saveNote()
+		resetForm()
+	})
+
+	closeBtn := widget.NewButton("Chiudi", func() { // Tradotto
+		if !atLeastOneNoteSaved {
+			dialog.ShowConfirm("Attenzione", "Nessuna nota è stata salvata. Vuoi chiudere senza salvare e annullare il commit?", func(b bool) { // Tradotto
+				if b {
+					os.Exit(1)
+				}
+			}, w)
+		} else {
+			a.Quit()
+		}
+	})
+
+	// Funzione helper per creare una label con evidenziazione per i campi obbligatori
+	// Fyne non supporta facilmente il grassetto o il colore specifico per NewLabel
+	// senza temi custom, quindi useremo un asterisco e una label descrittiva.
+	createMandatoryLabel := func(text string) *widget.Label {
+		return widget.NewLabel(text + "*")
+	}
+	createOptionalLabel := func(text string) *widget.Label {
+		return widget.NewLabel(text + " (facoltativo):")
+	}
+
+	// Layout dei campi principali
+	mainFormFields := container.NewVBox(
+		excludedFromReleaseNote,
+		createMandatoryLabel("Tipo"), tipo,
+		createMandatoryLabel("Modulo"), modulo,
+		createOptionalLabel("Titolo"), titolo,
+		descrizioneLabel, // Usa la label dinamica qui
+		descrizione,
+		createOptionalLabel("Numero Ticket Interno"), internalTicket,
+		createOptionalLabel("Numero Ticket Cliente"), clientTicket,
+	)
+
+	// Raggruppamento dei campi di commit in un "card" o "gruppo"
+	commitDetailsGroup := widget.NewCard(
+		"Dettagli Commit", // Tradotto
+		"",                // Sottotitolo vuoto
+		container.NewVBox( // Contenitore per gli elementi del gruppo
+			commitAuthorLabel,
+			commitDateLabel,
+			widget.NewLabel("Messaggio Commit (modificabile):"), // Tradotto e reso esplicito
+			commitDescEntry, // Campo modificabile
+		),
+	)
+
+	// Layout della form con le sezioni principali e il gruppo commit
+	formContent := container.NewVBox(
+		mainFormFields,
+		widget.NewSeparator(),
+		commitDetailsGroup,
+		widget.NewSeparator(),
+	)
+
+	// Layout dei bottoni
+	buttonLayout := container.NewGridWithColumns(3, saveBtn, addNoteBtn, closeBtn)
+
+	// Contenuto principale della finestra usando NewBorder:
+	// La parte centrale (formContent avvolta in NewVScroll e NewPadded) si espanderà,
+	// mentre i bottoni rimarranno fissi in basso.
+	w.SetContent(container.NewBorder(
+		nil,          // Nessun elemento in alto
+		buttonLayout, // Bottoni in basso
+		nil,          // Nessun elemento a sinistra
+		nil,          // Nessun elemento a destra
+		container.NewPadded(container.NewVScroll(formContent)), // Contenuto principale al centro, espandibile, con padding e scroll
+	))
+
+	// Imposta lo stato iniziale della label della descrizione e del tipo
+	excludedFromReleaseNote.OnChanged(excludedFromReleaseNote.Checked) // Esegui la funzione una volta all'avvio
+	if !excludedFromReleaseNote.Checked {                              // Se non è escluso, imposta il tipo predefinito
+		tipo.SetSelected("Generico")
+	}
+
+	w.ShowAndRun()
+}

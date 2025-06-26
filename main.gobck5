@@ -1,0 +1,362 @@
+package main
+
+import (
+	"encoding/json"
+	"fmt"
+	"os"
+	"os/exec"
+	"strings"
+	"time"
+
+	"fyne.io/fyne/v2"
+	"fyne.io/fyne/v2/app"
+	"fyne.io/fyne/v2/container"
+	"fyne.io/fyne/v2/dialog"
+	"fyne.io/fyne/v2/widget"
+)
+
+// --- IMPORTANTE: ORDINE DELLE DICHIARAZIONI ALL'INTERNO DI main() ---
+// Per evitare errori "undefined" dovuti allo scope e ai riferimenti incrociati,
+// le variabili e le funzioni devono essere definite *prima* di essere utilizzate.
+
+// Sequenza logica garantita per questo codice:
+// 1. Recupero dati Git.
+// 2. Dichiarazione delle variabili per i campi del form (Entry, Select, Check),
+//    e delle variabili per i *pulsanti* (definite come puntatori inizialmente).
+// 3. Dichiarazione delle Label per i dettagli del commit.
+// 4. Dichiarazione delle variabili di stato (es. isAnyNoteSavedForCurrentCommit).
+// 5. Dichiarazione e inizializzazione dell'etichetta di stato della form (formStatusLabel).
+// 6. Definizione delle funzioni helper (resetForm).
+// 7. **CRITICO: La funzione 'saveNoteFunc' DEVE essere definita QUI,
+//    prima che venga inizializzata la logica dei pulsanti che la chiamano.**
+// 8. **Inizializzazione dei pulsanti (assegnando loro le istanze di widget.NewButton),
+//    ORA 'saveNoteFunc' è definita e può essere usata nei loro handler.**
+// 9. Definizione delle funzioni helper per le label (createMandatoryLabel, createOptionalLabel).
+// 10. Creazione dei contenitori di layout dei campi (mainFormFields, commitDetailsGroup, formLayout, contentScroll).
+// 11. **Creazione del 'buttonContainer' che raggruppa i pulsanti. Tutti i pulsanti devono essere inizializzati PRIMA.**
+// 12. Impostazione del contenuto della finestra 'w.SetContent()'.
+// 13. Chiamate di inizializzazione finali (es. excludedFromReleaseNote.OnChanged).
+// ----------------------------------------------------------------------
+
+// Release rappresenta la struttura di una singola nota di rilascio.
+type Release struct {
+	Data                    string `json:"data"`
+	Tipo                    string `json:"tipo"`
+	Modulo                  string `json:"modulo"`
+	Titolo                  string `json:"titolo,omitempty"`
+	Descrizione             string `json:"descrizione"`
+	InternalTicket          string `json:"internalTicket,omitempty"`
+	ClientTicket            string `json:"clientTicket,omitempty"`
+	CommitAuthor            string `json:"commitAuthor"`
+	CommitDesc              string `json:"commitDesc"`
+	CommitDate              string `json:"commitDate"`
+	CommitHash              string `json:"commitHash"` // Nuovo campo per l'hash del commit
+	ExcludedFromReleaseNote bool   `json:"excludedFromReleaseNote"`
+}
+
+// ReleaseFile è la struttura per il file JSON che contiene tutte le release.
+type ReleaseFile struct {
+	Releases []Release `json:"releases"`
+}
+
+// loadModules carica i moduli da un file JSON esterno.
+func loadModules(filePath string) ([]string, error) {
+	content, err := os.ReadFile(filePath)
+	if err != nil {
+		return nil, fmt.Errorf("errore nella lettura del file moduli: %w", err)
+	}
+
+	var modules []string
+	err = json.Unmarshal(content, &modules)
+	if err != nil {
+		return nil, fmt.Errorf("errore nel parsing del file moduli: %w", err)
+	}
+	return modules, nil
+}
+
+// getGitData recupera i dati rilevanti per il commit attuale.
+// commitMsgFilePath è il percorso al file temporaneo di Git contenente il messaggio.
+func getGitData(commitMsgFilePath string) (author, description, date, commitHash string, err error) {
+	cmdAuthor := exec.Command("git", "config", "user.name")
+	outAuthor, err := cmdAuthor.Output()
+	if err != nil {
+		author = os.Getenv("USER")
+		if author == "" {
+			author = os.Getenv("USERNAME")
+		}
+		if author == "" {
+			author = "Sconosciuto"
+		}
+		fmt.Printf("Avviso: Impossibile ottenere user.name da Git (%v). Usando l'utente di sistema: %s\n", err, author)
+	} else {
+		author = strings.TrimSpace(string(outAuthor))
+	}
+
+	commitMsgContent, err := os.ReadFile(commitMsgFilePath)
+	if err != nil {
+		return "", "", "", "", fmt.Errorf("errore nella lettura del file del messaggio di commit (%s): %w", commitMsgFilePath, err)
+	}
+	lines := strings.Split(string(commitMsgContent), "\n")
+	var cleanedDescription []string
+	for _, line := range lines {
+		trimmedLine := strings.TrimSpace(line)
+		if !strings.HasPrefix(trimmedLine, "#") && trimmedLine != "" {
+			cleanedDescription = append(cleanedDescription, line)
+		}
+	}
+	description = strings.TrimSpace(strings.Join(cleanedDescription, "\n"))
+
+	// Formato data e ora locale italiano
+	date = time.Now().Format("02/01/2006 15:04:05")
+
+	// Recupera l'hash del commit corrente
+	cmdHash := exec.Command("git", "rev-parse", "HEAD")
+	outHash, err := cmdHash.Output()
+	if err != nil {
+		commitHash = "Sconosciuto"
+		fmt.Printf("Avviso: Impossibile ottenere l'hash del commit da Git (%v). Usando 'Sconosciuto'\n", err)
+	} else {
+		commitHash = strings.TrimSpace(string(outHash))
+	}
+
+	return author, description, date, commitHash, nil
+}
+
+func main() {
+	a := app.New()
+	// Altezza della finestra aumentata a 900
+	w := a.NewWindow("Generatore Note di Rilascio")
+	w.Resize(fyne.NewSize(700, 900))
+
+	if len(os.Args) < 2 {
+		dialog.ShowError(fmt.Errorf("Questa applicazione deve essere eseguita come un hook 'prepare-commit-msg' e necessita del percorso del file del messaggio di commit come argomento."), w)
+		return
+	}
+	commitMsgFilePath := os.Args[1]
+
+	modules, err := loadModules("modules.json")
+	if err != nil {
+		dialog.ShowError(fmt.Errorf("Errore nel caricamento dei moduli: %v", err), w)
+		return
+	}
+
+	// 1. Recupero dati Git
+	commitAuthor, commitDesc, commitDate, commitHash, err := getGitData(commitMsgFilePath)
+	if err != nil {
+		dialog.ShowError(fmt.Errorf("Impossibile recuperare i dati del commit attuale. Assicurati di eseguire l'applicazione in un repository Git valido. Errore: %v", err), w)
+		return
+	}
+
+	// 2. Dichiarazione delle variabili per i campi del form (e puntatori per i bottoni)
+	excludedFromReleaseNote := widget.NewCheck("Escludi dalla Nota di Rilascio", nil)
+	tipi := []string{"Funzionalità", "Correzione Bug", "Refactoring", "Documentazione", "Generico"}
+	tipo := widget.NewSelect(tipi, nil)
+	modulo := widget.NewSelect(modules, nil)
+	titolo := widget.NewEntry()
+	descrizione := widget.NewMultiLineEntry()
+	internalTicket := widget.NewEntry()
+	clientTicket := widget.NewEntry()
+
+	// Dichiarazione dei puntatori ai bottoni (inizialmente nil, assegnati dopo la definizione di saveNoteFunc)
+	var saveBtn *widget.Button
+	var addNoteBtn *widget.Button
+	var closeBtn *widget.Button
+
+	// Label per la descrizione che cambia dinamicamente
+	descrizioneLabel := widget.NewLabel("Descrizione (min. 20 caratteri):")
+
+	// Listener per il checkbox excludedFromReleaseNote (usato qui per inizializzare e gestire la label)
+	excludedFromReleaseNote.OnChanged = func(checked bool) {
+		if checked {
+			descrizioneLabel.SetText("Descrizione:") // Rimuove il limite visivo
+			tipo.ClearSelected()                     // Svuota la selezione se diventa non obbligatorio
+			modulo.ClearSelected()
+		} else {
+			descrizioneLabel.SetText("Descrizione (min. 20 caratteri):") // Ripristina il limite visivo
+			tipo.SetSelected("Generico")                                 // Imposta default se torna obbligatorio
+		}
+		descrizioneLabel.Refresh()
+	}
+
+	// 3. Dichiarazione delle Label per i dettagli del commit
+	commitAuthorLabel := widget.NewLabel(fmt.Sprintf("Autore Commit: %s", commitAuthor))
+	commitDateLabel := widget.NewLabel(fmt.Sprintf("Data Commit: %s", commitDate))
+	commitHashLabel := widget.NewLabel(fmt.Sprintf("Hash Commit: %s", commitHash))
+	commitDescLabel := widget.NewLabel(fmt.Sprintf("Messaggio Commit: %s", commitDesc))
+
+	// 4. Dichiarazione delle variabili di stato
+	var isAnyNoteSavedForCurrentCommit bool // Indica se almeno una nota è stata salvata per questo commit
+
+	// 5. Dichiarazione e inizializzazione dell'etichetta di stato della form
+	formStatusLabel := widget.NewLabel("Nuova nota: inserisci i dettagli.")
+	formStatusLabel.Alignment = fyne.TextAlignCenter
+	formStatusLabel.TextStyle.Bold = true
+
+	// 6. Definizione delle funzioni helper
+	resetForm := func() {
+		tipo.SetSelected("Generico") // Default a "Generico"
+		modulo.SetSelected("")
+		titolo.SetText("")
+		descrizione.SetText("")
+		internalTicket.SetText("")
+		clientTicket.SetText("")
+		excludedFromReleaseNote.SetChecked(false)
+		formStatusLabel.SetText("Nuova nota: inserisci i dettagli.") // Resetta il messaggio di stato
+		formStatusLabel.Refresh()
+	}
+
+	// 7. CRITICO: Definizione della funzione 'saveNoteFunc' QUI, prima dei pulsanti
+	saveNoteFunc := func() {
+		isExcluded := excludedFromReleaseNote.Checked
+
+		// Validazioni condizionali
+		if !isExcluded {
+			if tipo.Selected == "" {
+				dialog.ShowError(fmt.Errorf("Tipo non selezionato."), w)
+				return
+			}
+			if modulo.Selected == "" {
+				dialog.ShowError(fmt.Errorf("Modulo non selezionato."), w)
+				return
+			}
+			if len(descrizione.Text) < 20 {
+				dialog.ShowError(fmt.Errorf("Descrizione troppo corta (minimo 20 caratteri)."), w)
+				return
+			}
+		} else { // Se è esclusa, controlla solo che la descrizione non sia vuota
+			if strings.TrimSpace(descrizione.Text) == "" {
+				dialog.ShowError(fmt.Errorf("La Descrizione non può essere vuota, anche se la nota è esclusa dalla Release Note."), w)
+				return
+			}
+		}
+
+		release := Release{
+			Data:                    time.Now().Format("02/01/2006"), // Formato data locale italiano
+			Tipo:                    tipo.Selected,
+			Modulo:                  modulo.Selected,
+			Titolo:                  strings.TrimSpace(titolo.Text),
+			Descrizione:             strings.TrimSpace(descrizione.Text),
+			InternalTicket:          strings.TrimSpace(internalTicket.Text),
+			ClientTicket:            strings.TrimSpace(clientTicket.Text),
+			CommitAuthor:            commitAuthor,
+			CommitDesc:              commitDesc, // Usa il messaggio commit originale (non modificabile)
+			CommitDate:              commitDate,
+			CommitHash:              commitHash, // Inserisce l'hash del commit
+			ExcludedFromReleaseNote: isExcluded,
+		}
+
+		filePath := "release_notes.json"
+		var relFile ReleaseFile
+
+		if content, err := os.ReadFile(filePath); err == nil {
+			_ = json.Unmarshal(content, &relFile)
+		}
+
+		relFile.Releases = append(relFile.Releases, release)
+
+		if out, err := json.MarshalIndent(relFile, "", "  "); err == nil {
+			os.WriteFile(filePath, out, 0644)
+			isAnyNoteSavedForCurrentCommit = true // Imposta a true dopo il primo salvataggio
+			// Ora addNoteBtn è dichiarato e può essere usato
+			if addNoteBtn != nil { // Sicurezza: controlla che il puntatore non sia nil
+				addNoteBtn.Show()
+			}
+			formStatusLabel.SetText("Nota salvata! Puoi aggiungerne un'altra per questo commit.") // Aggiorna il messaggio di stato
+			formStatusLabel.Refresh()
+			dialog.ShowInformation("Successo", "Release salvata correttamente!", w)
+		} else {
+			dialog.ShowError(fmt.Errorf("Errore nel salvataggio della release: %v", err), w)
+		}
+	}
+
+	// 8. Inizializzazione dei pulsanti (Ora saveNoteFunc è definita)
+	saveBtn = widget.NewButton("Salva", func() {
+		saveNoteFunc()
+	})
+
+	addNoteBtn = widget.NewButton("Aggiungi Nuova Nota", func() {
+		saveNoteFunc()
+		resetForm()
+	})
+	addNoteBtn.Hide() // Nasconde il pulsante all'avvio
+
+	closeBtn = widget.NewButton("Chiudi", func() {
+		if !isAnyNoteSavedForCurrentCommit {
+			dialog.ShowConfirm("Attenzione", "Nessuna nota è stata salvata per questo commit. Vuoi chiudere senza salvare e annullare il commit?", func(b bool) {
+				if b {
+					os.Exit(1) // Esci con codice 1 per annullare il commit
+				}
+			}, w)
+		} else {
+			a.Quit() // Esci normalmente (codice 0) se almeno una nota è stata salvata
+		}
+	})
+
+	// 9. Definizione delle funzioni helper per le label
+	createMandatoryLabel := func(text string) *widget.Label {
+		return widget.NewLabel(text + "*")
+	}
+	createOptionalLabel := func(text string) *widget.Label {
+		return widget.NewLabel(text + " (facoltativo):")
+	}
+
+	// 10. Creazione dei contenitori di layout dei campi
+	mainFormFields := container.NewVBox(
+		excludedFromReleaseNote,
+		createMandatoryLabel("Tipo"), tipo,
+		createMandatoryLabel("Modulo"), modulo,
+		createOptionalLabel("Titolo"), titolo,
+		descrizioneLabel, // Usa la label dinamica qui
+		descrizione,
+		createOptionalLabel("Numero Ticket Interno"), internalTicket,
+		createOptionalLabel("Numero Ticket Cliente"), clientTicket,
+	)
+
+	// Raggruppamento dei campi di commit in un "card"
+	commitDetailsGroup := widget.NewCard(
+		"Dettagli Commit",
+		"", // Sottotitolo vuoto
+		container.NewVBox( // Contenitore per gli elementi del gruppo
+			commitAuthorLabel,
+			commitDateLabel,
+			commitHashLabel, // Aggiunto l'hash del commit
+			commitDescLabel, // Messaggio commit come Label (non modificabile)
+		),
+	)
+
+	// Layout della form con le sezioni principali e il gruppo commit
+	formLayout := container.NewVBox(
+		formStatusLabel, // Etichetta di stato in cima
+		mainFormFields,
+		widget.NewSeparator(),
+		commitDetailsGroup,
+		widget.NewSeparator(),
+	)
+
+	// Wrap the form in a padded container e poi in VScroll
+	contentScroll := container.NewPadded(container.NewVScroll(formLayout))
+
+	// 11. Creazione del 'buttonContainer' (TUTTI i pulsanti devono essere inizializzati PRIMA)
+	buttonContainer := container.NewGridWithColumns(3,
+		saveBtn,
+		addNoteBtn, // Questo sarà gestito tramite Show()/Hide()
+		closeBtn,
+	)
+
+	// 12. Impostazione del contenuto della finestra 'w.SetContent()'
+	w.SetContent(container.NewBorder(
+		nil,             // Nessun elemento in alto
+		buttonContainer, // Bottoni in basso
+		nil,             // Nessun elemento a sinistra
+		nil,             // Nessun elemento a destra
+		contentScroll,   // Contenuto principale al centro, espandibile, con padding e scroll
+	))
+
+	// 13. Chiamate di inizializzazione finali
+	excludedFromReleaseNote.OnChanged(excludedFromReleaseNote.Checked) // Esegui la funzione una volta all'avvio
+	if !excludedFromReleaseNote.Checked {                              // Se non è escluso, imposta il tipo predefinito
+		tipo.SetSelected("Generico")
+	}
+
+	w.ShowAndRun()
+}

@@ -9,6 +9,7 @@
       "commitAuthor": "cammoranesi",
       "commitDesc": "provanuova",
       "commitDate": "2025-06-26 14:37:25 +0200",
+      "commitHash": "",
       "excludedFromReleaseNote": true
     },
     {
@@ -21,6 +22,7 @@
       "commitAuthor": "cammoranesi",
       "commitDesc": "prova molto bella",
       "commitDate": "2025-06-26 15:00:24 +0200",
+      "commitHash": "",
       "excludedFromReleaseNote": false
     },
     {
@@ -34,7 +36,19 @@
       "commitAuthor": "cammoranesi",
       "commitDesc": "prova molto bella ma nuova",
       "commitDate": "2025-06-26 15:00:24 +0200",
+      "commitHash": "",
       "excludedFromReleaseNote": false
+    },
+    {
+      "data": "26/06/2025 17:19:07",
+      "tipo": "Generico",
+      "modulo": "COF",
+      "descrizione": "a",
+      "commitAuthor": "cammoranesi",
+      "commitDesc": "non committa?",
+      "commitDate": "2025-06-26 15:02:16 +0200",
+      "commitHash": "9cec29e62e27c879da856bdcf949d5d44d70ade2",
+      "excludedFromReleaseNote": true
     }
   ]
 }
