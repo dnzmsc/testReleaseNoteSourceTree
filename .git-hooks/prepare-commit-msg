@@ -9,13 +9,13 @@ COMMIT_MSG_FILE="$1" # Il primo argomento dell'hook è il percorso del file del 
 LOG_FILE=".git-hooks/prepare-commit-msg.log"
 # Reindirizza stdout e stderr al file di log
 exec > >(tee -a "$LOG_FILE") 2>&1
-echo "--- Inizio Log prepare-commit-msg (VERIFICA TIMESTAMP): $(date) ---"
+echo "--- Inizio Log prepare-commit-msg (VERS. FINALE E PULITA): $(date) ---"
 
 # Variabile d'ambiente per indicare che siamo dentro l'hook
 export GIT_INSIDE_HOOK_COMMIT=true
 
 echo "----------------------------------------------------"
-echo "--- Inizio esecuzione prepare-commit-msg hook (Modalità Timestamp Check) ---"
+echo "--- Inizio esecuzione prepare-commit-msg hook ---"
 echo "----------------------------------------------------"
 echo "DEBUG INFO: Percorso del file messaggio di commit: $COMMIT_MSG_FILE"
 echo "DEBUG INFO: Percorso dell'applicazione Fyne: $APP"
@@ -75,23 +75,20 @@ if [ "$AFTER_RN_FILE" -le "$BEFORE_RN_FILE" ]; then
     exit 1
 fi
 
-# Se tutto è OK, aggiungi il file release_notes.json allo staging
-# Questo passaggio è per gestire i fine riga se non sono stati completamente risolti altrove.
+# --- Aggiungi il file release_notes.json all'indice ---
+echo "DEBUG INFO: Aggiungo $FILE_RELEASE_NOTES all'indice."
 git add "$FILE_RELEASE_NOTES"
-if git diff --quiet --exit-code --cached "$FILE_RELEASE_NOTES"; then
-    echo "DEBUG INFO: Il file $FILE_RELEASE_NOTES è nell'indice ed è pulito."
-else
-    # Questo fallback è utile se ci sono ancora problemi di fine riga che git diff --quiet rileva.
-    echo "DEBUG INFO: Il file $FILE_RELEASE_NOTES è nell'indice ma ha modifiche non stagionate dopo 'git add'."
-    echo "DEBUG INFO: Eseguo 'git add -f' come fallback per forzare l'aggiornamento dell'indice."
-    git add -f "$FILE_RELEASE_NOTES" # Forza l'aggiunta per superare il problema dei fine riga
-fi
 
 echo "DEBUG INFO: Controllo finale stato Git dopo add:"
 git status --porcelain
 
+# Modifica il messaggio di commit per indicare che le note sono state generate.
+echo "" >> "$COMMIT_MSG_FILE"
+echo "# Release notes generate e incluse in questo commit." >> "$COMMIT_MSG_FILE"
+echo "# Non modificare la linea precedente." >> "$COMMIT_MSG_FILE"
+
 echo "----------------------------------------------------"
-echo "✅ Successo: Almeno una nota di rilascio è stata salvata e il file $FILE_RELEASE_NOTES è aggiornato nell'indice."
+echo "✅ Successo: File release_notes.json aggiornato e correttamente aggiunto all'indice."
 echo "--- Fine esecuzione prepare-commit-msg hook ---"
 echo "----------------------------------------------------"
 
