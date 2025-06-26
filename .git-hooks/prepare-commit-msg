@@ -1,0 +1,75 @@
+#!/bin/sh
+
+# Definisci il percorso dell'applicazione e del file delle release notes
+# Compila la tua app Go con: go build -o release-notes-app
+# Poi metti l'eseguibile 'release-notes-app' nella stessa cartella .git/hooks/
+APP="./release-notes-app"
+FILE="release_notes.json"
+
+echo "Running pre-commit hook..."
+
+# Salva lo stato di modifica del file prima di avviare l'app
+# Questo serve per verificare se il file è stato effettivamente modificato dopo l'esecuzione dell'app.
+# Utilizza una sintassi compatibile con vari sistemi (Linux, macOS, e con Git Bash su Windows).
+BEFORE=$(stat -f "%m" "$FILE" 2>/dev/null || stat -c "%Y" "$FILE" 2>/dev/null || echo "0")
+
+echo "✅ Avvio applicazione GUI per le Release Notes..."
+# Avvia l'applicazione Fyne.
+# L'applicazione Fyne gestirà internamente la logica di salvataggio/chiusura.
+# Se l'applicazione Fyne viene chiusa dall'utente senza salvare (e l'utente conferma di non voler salvare),
+# il suo codice di uscita (exit code) sarà non zero, annullando il commit.
+"$APP"
+
+# Controlla il codice di uscita dell'applicazione Fyne.
+# Se l'applicazione termina con un errore (ad esempio, l'utente ha annullato il salvataggio),
+# il commit verrà annullato.
+if [ $? -ne 0 ]; then
+    echo "❌ L'applicazione per le Release Notes è stata chiusa o ha riscontrato un errore. Commit annullato."
+    exit 1
+fi
+
+# Verifica presenza file (anche se l'app dovrebbe crearlo o modificarlo, è una buona precauzione)
+if [ ! -f "$FILE" ]; then
+    echo "❌ File $FILE mancante dopo l'esecuzione dell'applicazione. Commit annullato."
+    exit 1
+fi
+
+# Verifica modifica file
+# Questo controllo è cruciale: se il file non è stato modificato, significa che nessuna nota è stata salvata.
+AFTER=$(stat -f "%m" "$FILE" 2>/dev/null || stat -c "%Y" "$FILE")
+if [ "$AFTER" -le "$BEFORE" ]; then
+    echo "❌ Il file $FILE non è stato modificato dall'applicazione. Assicurati di aver salvato almeno una nota."
+    echo "Commit annullato."
+    exit 1
+fi
+
+# Verifica data ultima release
+# Questo controllo assicura che l'ultima entry nel JSON sia sempre del giorno corrente.
+TODAY=$(date +%Y-%m-%d)
+LAST_DATE=$(python3 -c "
+import json
+try:
+    with open('$FILE') as f:
+        data = json.load(f)
+    if 'releases' in data and len(data['releases']) > 0:
+        # Prende la data dell'ultima release
+        print(data['releases'][-1]['data'])
+    else:
+        # Nessuna release o formato non corretto, restituisce una stringa che non corrisponderà mai a TODAY
+        print('INVALID_DATE')
+except (FileNotFoundError, json.JSONDecodeError, IndexError, KeyError):
+    # Gestisce errori come file non trovato, JSON malformato o chiavi mancanti
+    print('INVALID_DATE')
+")
+
+if [ "$LAST_DATE" != "$TODAY" ]; then
+    echo "❌ L'ultima release nel file $FILE non è stata aggiornata a oggi ($LAST_DATE). Commit annullato."
+    exit 1
+fi
+
+# Aggiungi il file delle release notes all'area di staging
+# Questo è l'ultimo passaggio per assicurare che le modifiche al JSON siano incluse nel commit.
+git add "$FILE"
+echo "✅ Release note aggiornata e aggiunta al commit."
+
+exit 0 # Il commit può procedere

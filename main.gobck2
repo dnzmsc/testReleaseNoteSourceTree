@@ -1,0 +1,248 @@
+package main
+
+import (
+	"encoding/json"
+	"fmt"
+	"io/ioutil"
+	"os"
+	"os/exec" // Importa il package per eseguire comandi esterni
+	"strings"
+	"time"
+
+	"fyne.io/fyne/v2/app"
+	"fyne.io/fyne/v2/container"
+	"fyne.io/fyne/v2/dialog"
+	"fyne.io/fyne/v2/widget"
+	"fyne.io/fyne/v2"
+)
+
+// Release rappresenta la struttura di una singola nota di rilascio.
+type Release struct {
+	Data                   string `json:"data"`
+	Tipo                   string `json:"tipo"`
+	Modulo                 string `json:"modulo"`
+	Titolo                 string `json:"titolo,omitempty"` // omitempty per renderlo facoltativo nel JSON
+	Descrizione            string `json:"descrizione"`
+	InternalTicket         string `json:"internalTicket,omitempty"`
+	ClientTicket           string `json:"clientTicket,omitempty"`
+	CommitAuthor           string `json:"commitAuthor"`
+	CommitDesc             string `json:"commitDesc"`
+	CommitDate             string `json:"commitDate"`
+	ExcludedFromReleaseNote bool `json:"excludedFromReleaseNote"`
+}
+
+// ReleaseFile è la struttura per il file JSON che contiene tutte le release.
+type ReleaseFile struct {
+	Releases []Release `json:"releases"`
+}
+
+// loadModules carica i moduli da un file JSON esterno.
+func loadModules(filePath string) ([]string, error) {
+	content, err := ioutil.ReadFile(filePath)
+	if err != nil {
+		return nil, fmt.Errorf("errore nella lettura del file moduli: %w", err)
+	}
+
+	var modules []string
+	err = json.Unmarshal(content, &modules)
+	if err != nil {
+		return nil, fmt.Errorf("errore nel parsing del file moduli: %w", err)
+	}
+	return modules, nil
+}
+
+// getGitData recupera i dati dell'ultimo commit da Git.
+// Questa funzione è progettata per essere eseguita all'interno di un repository Git.
+func getGitData() (author, description, date string, err error) {
+	// Ottieni l'autore del commit
+	cmdAuthor := exec.Command("git", "log", "-1", "--pretty=format:%an")
+	outAuthor, err := cmdAuthor.Output()
+	if err != nil {
+		return "", "", "", fmt.Errorf("errore nell'ottenere l'autore del commit: %w", err)
+	}
+	author = strings.TrimSpace(string(outAuthor))
+
+	// Ottieni la descrizione del commit (full message)
+	cmdDesc := exec.Command("git", "log", "-1", "--pretty=format:%B")
+	outDesc, err := cmdDesc.Output()
+	if err != nil {
+		return "", "", "", fmt.Errorf("errore nell'ottenere la descrizione del commit: %w", err)
+	}
+	description = strings.TrimSpace(string(outDesc))
+
+	// Ottieni la data del commit in formato ISO
+	cmdDate := exec.Command("git", "log", "-1", "--pretty=format:%ad", "--date=iso")
+	outDate, err := cmdDate.Output()
+	if err != nil {
+		return "", "", "", fmt.Errorf("errore nell'ottenere la data del commit: %w", err)
+	}
+	date = strings.TrimSpace(string(outDate))
+
+	return author, description, date, nil
+}
+
+func main() {
+	a := app.New()
+	w := a.NewWindow("Release Notes Generator")
+	w.Resize(fyne.NewSize(600, 700))
+
+	// Carica i moduli all'avvio
+	modules, err := loadModules("modules.json")
+	if err != nil {
+		dialog.ShowError(err, w)
+		return
+	}
+
+	// Recupera i dati del commit all'avvio dell'applicazione
+	commitAuthor, commitDesc, commitDate, err := getGitData()
+	if err != nil {
+		// Se l'applicazione non è in un repo Git o Git non è installato, mostra un errore
+		dialog.ShowError(fmt.Errorf("Impossibile recuperare i dati del commit. Assicurati di eseguire l'applicazione in un repository Git valido e che Git sia installato. Errore: %v", err), w)
+		// Potresti decidere di permettere all'utente di continuare senza questi dati, o chiudere l'app
+		// Per ora, chiudiamo l'app se non possiamo ottenere i dati essenziali del commit.
+		return
+	}
+
+	// Campi del form
+	excludedFromReleaseNote := widget.NewCheck("Escluso dalla Release Note", nil)
+	tipi := []string{"Feature", "Fix", "Refactor", "Docs", "Chore"}
+	tipo := widget.NewSelect(tipi, nil)
+	modulo := widget.NewSelect(modules, nil)
+	titolo := widget.NewEntry()
+	descrizione := widget.NewMultiLineEntry()
+	internalTicket := widget.NewEntry()
+	clientTicket := widget.NewEntry()
+
+	// Campi del commit (non editabili)
+	commitAuthorLabel := widget.NewLabel(fmt.Sprintf("Autore Commit: %s", commitAuthor))
+	commitDescLabel := widget.NewMultiLineEntry()
+	commitDescLabel.SetText(fmt.Sprintf("Descrizione Commit: %s", commitDesc))
+	commitDescLabel.Disable() // Non editabile
+	commitDateLabel := widget.NewLabel(fmt.Sprintf("Data Commit: %s", commitDate))
+
+	// Variabile per tenere traccia se almeno una nota è stata salvata
+	var atLeastOneNoteSaved bool
+
+	// Funzione per resettare i campi del form per una nuova nota
+	resetForm := func() {
+		tipo.SetSelected("")
+		modulo.SetSelected("")
+		titolo.SetText("")
+		descrizione.SetText("")
+		internalTicket.SetText("")
+		clientTicket.SetText("")
+		excludedFromReleaseNote.SetChecked(false)
+	}
+
+	// Funzione per salvare la nota
+	saveNote := func() {
+		// Ottieni lo stato del checkbox
+		isExcluded := excludedFromReleaseNote.Checked
+
+		// Validazioni condizionali
+		if !isExcluded { // Se non è esclusa, le validazioni sono attive
+			if tipo.Selected == "" {
+				dialog.ShowError(fmt.Errorf("Tipo non selezionato"), w)
+				return
+			}
+			if modulo.Selected == "" {
+				dialog.ShowError(fmt.Errorf("Modulo non selezionato"), w)
+				return
+			}
+			if len(descrizione.Text) < 20 {
+				dialog.ShowError(fmt.Errorf("Descrizione troppo corta (minimo 20 caratteri)"), w)
+				return
+			}
+		} else { // Se è esclusa, controlla solo che la descrizione non sia vuota
+			if strings.TrimSpace(descrizione.Text) == "" {
+				dialog.ShowError(fmt.Errorf("Descrizione non può essere vuota, anche se esclusa"), w)
+				return
+			}
+		}
+
+		// Crea la release
+		release := Release{
+			Data:                   time.Now().Format("2006-01-02"),
+			Tipo:                   tipo.Selected,
+			Modulo:                 modulo.Selected,
+			Titolo:                 strings.TrimSpace(titolo.Text),
+			Descrizione:            strings.TrimSpace(descrizione.Text),
+			InternalTicket:         strings.TrimSpace(internalTicket.Text),
+			ClientTicket:           strings.TrimSpace(clientTicket.Text),
+			CommitAuthor:           commitAuthor, // Dati reali dal commit
+			CommitDesc:             commitDesc,   // Dati reali dal commit
+			CommitDate:             commitDate,   // Dati reali dal commit
+			ExcludedFromReleaseNote: isExcluded,
+		}
+
+		filePath := "release_notes.json"
+		var relFile ReleaseFile
+
+		// Carica se esiste
+		if content, err := os.ReadFile(filePath); err == nil {
+			_ = json.Unmarshal(content, &relFile)
+		}
+
+		// Aggiunge nuova nota
+		relFile.Releases = append(relFile.Releases, release)
+
+		// Salva
+		if out, err := json.MarshalIndent(relFile, "", "  "); err == nil {
+			os.WriteFile(filePath, out, 0644)
+			atLeastOneNoteSaved = true // Segna che almeno una nota è stata salvata
+			dialog.ShowInformation("Successo", "Release salvata correttamente!", w)
+		} else {
+			dialog.ShowError(fmt.Errorf("Errore nel salvataggio: %v", err), w)
+		}
+	}
+
+	// Bottoni
+	saveBtn := widget.NewButton("Salva", func() {
+		saveNote()
+	})
+
+	addNoteBtn := widget.NewButton("Altra Nota", func() {
+		// Tenta di salvare la nota corrente prima di resettare e permettere una nuova
+		saveNote()
+		resetForm()
+		saveBtn.Enable() // Riabilita il bottone Salva per la nuova nota
+	})
+
+	closeBtn := widget.NewButton("Chiudi", func() {
+		if !atLeastOneNoteSaved {
+			dialog.ShowConfirm("Attenzione", "Nessuna nota è stata salvata. Vuoi chiudere senza salvare?", func(b bool) {
+				if b {
+					a.Quit()
+				}
+			}, w)
+		} else {
+			a.Quit()
+		}
+	})
+
+	// Layout dei campi
+	formLayout := container.NewVBox(
+		excludedFromReleaseNote,
+		widget.NewLabel("Tipo:"), tipo,
+		widget.NewLabel("Modulo:"), modulo,
+		widget.NewLabel("Titolo (facoltativo):"), titolo,
+		widget.NewLabel("Descrizione (min. 20 caratteri):"), descrizione,
+		widget.NewLabel("Numero Ticket Interno (facoltativo):"), internalTicket,
+		widget.NewLabel("Numero Ticket Cliente (facoltativo):"), clientTicket,
+		widget.NewSeparator(),
+		commitAuthorLabel,
+		commitDateLabel,
+		commitDescLabel,
+		widget.NewSeparator(),
+	)
+
+	// Layout dei bottoni
+	buttonLayout := container.NewGridWithColumns(3, saveBtn, addNoteBtn, closeBtn)
+
+	w.SetContent(container.NewVScroll(container.NewVBox(
+		formLayout,
+		buttonLayout,
+	)))
+
+	w.ShowAndRun()
+}

@@ -1,0 +1,60 @@
+#!/bin/bash
+
+echo "🪝 HOOK pre-commit avviato"
+
+FILE="release_notes.json"
+APP_MAC="./release-notes"
+APP_WIN="./release-notes.exe"
+
+# Rileva OS e seleziona binario
+if [[ "$OSTYPE" == "msys"* || "$OSTYPE" == "win32"* ]]; then
+  APP="$APP_WIN"
+else
+  APP="$APP_MAC"
+fi
+
+# Verifica eseguibile
+if [ ! -x "$APP" ]; then
+  echo "❌ Eseguibile non trovato o non eseguibile: $APP"
+  exit 1
+fi
+
+# Salva timestamp iniziale
+if [ -f "$FILE" ]; then
+  BEFORE=$(stat -f "%m" "$FILE" 2>/dev/null || stat -c "%Y" "$FILE")
+else
+  BEFORE=0
+fi
+
+echo "✅ Avvio applicazione GUI..."
+"$APP"
+
+# Verifica presenza file
+if [ ! -f "$FILE" ]; then
+  echo "❌ File $FILE mancante. Commit annullato."
+  exit 1
+fi
+
+# Verifica modifica file
+AFTER=$(stat -f "%m" "$FILE" 2>/dev/null || stat -c "%Y" "$FILE")
+if [ "$AFTER" -le "$BEFORE" ]; then
+  echo "❌ Il file $FILE non è stato modificato. Commit annullato."
+  exit 1
+fi
+
+# Verifica data ultima release
+TODAY=$(date +%Y-%m-%d)
+LAST_DATE=$(python3 -c "
+import json
+with open('$FILE') as f:
+    data = json.load(f)
+print(data['releases'][-1]['data'])
+")
+
+if [ "$LAST_DATE" != "$TODAY" ]; then
+  echo "❌ Ultima release non aggiornata a oggi ($LAST_DATE). Commit annullato."
+  exit 1
+fi
+
+git add "$FILE"
+echo "✅ Release note aggiornata e aggiunta al commit."
