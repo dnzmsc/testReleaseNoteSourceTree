@@ -110,6 +110,16 @@
       "commitDesc": "prova",
       "commitDate": "2025-06-26 14:30:18 +0200",
       "excludedFromReleaseNote": true
+    },
+    {
+      "data": "2025-06-26",
+      "tipo": "Feature",
+      "modulo": "CMS",
+      "descrizione": "aerea",
+      "commitAuthor": "cammoranesi",
+      "commitDesc": "prova2",
+      "commitDate": "2025-06-26 14:31:00 +0200",
+      "excludedFromReleaseNote": true
     }
   ]
 }
