@@ -19,6 +19,16 @@
       "commitDesc": "aaa",
       "commitDate": "2025-06-26 12:09:06 +0200",
       "excludedFromReleaseNote": true
+    },
+    {
+      "data": "2025-06-26",
+      "tipo": "",
+      "modulo": "",
+      "descrizione": "a",
+      "commitAuthor": "cammoranesi",
+      "commitDesc": "a",
+      "commitDate": "2025-06-26 12:10:58 +0200",
+      "excludedFromReleaseNote": true
     }
   ]
 }
