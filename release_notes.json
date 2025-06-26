@@ -54,6 +54,17 @@
       "commitDate": "2025-06-26 17:40:05 +0200",
       "commitHash": "b05f039e1bff7526aad3cd07634e458305406cf2",
       "excludedFromReleaseNote": true
+    },
+    {
+      "data": "26/06/2025 17:43:06",
+      "tipo": "Generico",
+      "modulo": "",
+      "descrizione": "a",
+      "commitAuthor": "cammoranesi",
+      "commitDesc": "test",
+      "commitDate": "2025-06-26 17:42:08 +0200",
+      "commitHash": "540bdf9ad1dca603b4fdf1e5c15f321927b76385",
+      "excludedFromReleaseNote": true
     }
   ]
 }
