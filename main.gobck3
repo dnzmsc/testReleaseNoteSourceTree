@@ -89,10 +89,8 @@ func getGitData(commitMsgFilePath string) (author, description, date string, err
 
 func main() {
 	a := app.New()
-	// Aumenta le dimensioni della finestra per accogliere più contenuto e padding
-	// Regolata per evitare la scrollbar verticale inizialmente
-	w := a.NewWindow("Generatore Note di Rilascio")
-	w.Resize(fyne.NewSize(700, 850))
+	w := a.NewWindow("Release Notes Generator")
+	w.Resize(fyne.NewSize(600, 700))
 
 	if len(os.Args) < 2 {
 		dialog.ShowError(fmt.Errorf("Questa applicazione deve essere eseguita come un hook 'prepare-commit-msg' e necessita del percorso del file del messaggio di commit come argomento."), w)
@@ -102,7 +100,7 @@ func main() {
 
 	modules, err := loadModules("modules.json")
 	if err != nil {
-		dialog.ShowError(fmt.Errorf("Errore nel caricamento dei moduli: %v", err), w) // Tradotto
+		dialog.ShowError(err, w)
 		return
 	}
 
@@ -113,12 +111,9 @@ func main() {
 	}
 
 	// Campi del form
-	excludedFromReleaseNote := widget.NewCheck("Escludi dalla Nota di Rilascio", nil) // Tradotto
-
-	// Tipi: cambiato "Chore" in "Generico" e aggiunto come opzione
-	tipi := []string{"Funzionalità", "Correzione Bug", "Refactoring", "Documentazione", "Generico"}
+	excludedFromReleaseNote := widget.NewCheck("Escluso dalla Release Note", nil)
+	tipi := []string{"Feature", "Fix", "Refactor", "Docs", "Chore"}
 	tipo := widget.NewSelect(tipi, nil)
-
 	modulo := widget.NewSelect(modules, nil)
 	titolo := widget.NewEntry()
 	descrizione := widget.NewMultiLineEntry()
@@ -128,33 +123,29 @@ func main() {
 	// Label per la descrizione che cambia dinamicamente
 	descrizioneLabel := widget.NewLabel("Descrizione (min. 20 caratteri):")
 
-	// Campo modificabile per il messaggio di commit
-	commitDescEntry := widget.NewMultiLineEntry()
-	commitDescEntry.SetText(commitDesc) // Inizializza con il messaggio ereditato
-
 	// Listener per il checkbox excludedFromReleaseNote
 	excludedFromReleaseNote.OnChanged = func(checked bool) {
 		if checked {
 			descrizioneLabel.SetText("Descrizione:") // Rimuove il limite visivo
-			// Modulo e Tipo non sono più obbligatori se escluso
-			// Non disabilitiamo i campi, solo le validazioni
-			tipo.ClearSelected() // Svuota la selezione se diventa non obbligatorio
-			modulo.ClearSelected()
+			modulo.Enable()                          // Ri-abilita il modulo se era disabilitato (nel caso di logica futura)
 		} else {
 			descrizioneLabel.SetText("Descrizione (min. 20 caratteri):") // Ripristina il limite visivo
-			tipo.SetSelected("Generico")                                 // Imposta default se torna obbligatorio
 		}
+		// Aggiorna il layout dopo aver cambiato il testo della label
 		descrizioneLabel.Refresh()
 	}
 
 	commitAuthorLabel := widget.NewLabel(fmt.Sprintf("Autore Commit: %s", commitAuthor))
+	commitDescLabel := widget.NewMultiLineEntry()
+	commitDescLabel.SetText(fmt.Sprintf("Messaggio Commit: %s", commitDesc))
+	commitDescLabel.Disable()
 	commitDateLabel := widget.NewLabel(fmt.Sprintf("Data Commit: %s", commitDate))
 
 	var atLeastOneNoteSaved bool
 	var currentNoteSaved bool
 
 	resetForm := func() {
-		tipo.SetSelected("Generico") // Default a "Generico"
+		tipo.SetSelected("")
 		modulo.SetSelected("")
 		titolo.SetText("")
 		descrizione.SetText("")
@@ -166,7 +157,7 @@ func main() {
 
 	saveNote := func() {
 		if currentNoteSaved {
-			dialog.ShowInformation("Attenzione", "Questa nota è già stata salvata. Inserisci una nuova nota o chiudi.", w) // Tradotto
+			dialog.ShowInformation("Attenzione", "Questa nota è già stata salvata. Inserisci una nuova nota o chiudi.", w)
 			return
 		}
 
@@ -175,20 +166,20 @@ func main() {
 		// Validazioni condizionali
 		if !isExcluded {
 			if tipo.Selected == "" {
-				dialog.ShowError(fmt.Errorf("Tipo non selezionato."), w) // Tradotto
+				dialog.ShowError(fmt.Errorf("Tipo non selezionato"), w)
 				return
 			}
 			if modulo.Selected == "" {
-				dialog.ShowError(fmt.Errorf("Modulo non selezionato."), w) // Tradotto
+				dialog.ShowError(fmt.Errorf("Modulo non selezionato"), w)
 				return
 			}
 			if len(descrizione.Text) < 20 {
-				dialog.ShowError(fmt.Errorf("Descrizione troppo corta (minimo 20 caratteri)."), w) // Tradotto
+				dialog.ShowError(fmt.Errorf("Descrizione troppo corta (minimo 20 caratteri)"), w)
 				return
 			}
 		} else { // Se è esclusa, controlla solo che la descrizione non sia vuota
 			if strings.TrimSpace(descrizione.Text) == "" {
-				dialog.ShowError(fmt.Errorf("La Descrizione non può essere vuota, anche se la nota è esclusa dalla Release Note."), w) // Tradotto
+				dialog.ShowError(fmt.Errorf("Descrizione non può essere vuota, anche se esclusa"), w)
 				return
 			}
 		}
@@ -202,7 +193,7 @@ func main() {
 			InternalTicket:          strings.TrimSpace(internalTicket.Text),
 			ClientTicket:            strings.TrimSpace(clientTicket.Text),
 			CommitAuthor:            commitAuthor,
-			CommitDesc:              strings.TrimSpace(commitDescEntry.Text), // Usa il testo modificabile
+			CommitDesc:              commitDesc,
 			CommitDate:              commitDate,
 			ExcludedFromReleaseNote: isExcluded,
 		}
@@ -220,9 +211,9 @@ func main() {
 			os.WriteFile(filePath, out, 0644)
 			atLeastOneNoteSaved = true
 			currentNoteSaved = true
-			dialog.ShowInformation("Successo", "Release salvata correttamente!", w) // Tradotto
+			dialog.ShowInformation("Successo", "Release salvata correttamente!", w)
 		} else {
-			dialog.ShowError(fmt.Errorf("Errore nel salvataggio della release: %v", err), w) // Tradotto
+			dialog.ShowError(fmt.Errorf("Errore nel salvataggio: %v", err), w)
 		}
 	}
 
@@ -230,14 +221,14 @@ func main() {
 		saveNote()
 	})
 
-	addNoteBtn := widget.NewButton("Aggiungi Nuova Nota", func() { // Tradotto
+	addNoteBtn := widget.NewButton("Altra Nota", func() {
 		saveNote()
 		resetForm()
 	})
 
-	closeBtn := widget.NewButton("Chiudi", func() { // Tradotto
+	closeBtn := widget.NewButton("Chiudi", func() {
 		if !atLeastOneNoteSaved {
-			dialog.ShowConfirm("Attenzione", "Nessuna nota è stata salvata. Vuoi chiudere senza salvare e annullare il commit?", func(b bool) { // Tradotto
+			dialog.ShowConfirm("Attenzione", "Nessuna nota è stata salvata. Vuoi chiudere senza salvare e annullare il commit?", func(b bool) {
 				if b {
 					os.Exit(1)
 				}
@@ -247,65 +238,35 @@ func main() {
 		}
 	})
 
-	// Funzione helper per creare una label con evidenziazione per i campi obbligatori
-	// Fyne non supporta facilmente il grassetto o il colore specifico per NewLabel
-	// senza temi custom, quindi useremo un asterisco e una label descrittiva.
-	createMandatoryLabel := func(text string) *widget.Label {
-		return widget.NewLabel(text + "*")
-	}
-	createOptionalLabel := func(text string) *widget.Label {
-		return widget.NewLabel(text + " (facoltativo):")
-	}
-
-	// Layout dei campi principali
-	mainFormFields := container.NewVBox(
+	// Layout dei campi, usando la label dinamica
+	formLayout := container.NewVBox(
 		excludedFromReleaseNote,
-		createMandatoryLabel("Tipo"), tipo,
-		createMandatoryLabel("Modulo"), modulo,
-		createOptionalLabel("Titolo"), titolo,
+		widget.NewLabel("Tipo:"), tipo,
+		widget.NewLabel("Modulo:"), modulo,
+		widget.NewLabel("Titolo (facoltativo):"), titolo,
 		descrizioneLabel, // Usa la label dinamica qui
 		descrizione,
-		createOptionalLabel("Numero Ticket Interno"), internalTicket,
-		createOptionalLabel("Numero Ticket Cliente"), clientTicket,
-	)
-
-	// Raggruppamento dei campi di commit in un "card" o "gruppo"
-	commitDetailsGroup := widget.NewCard(
-		"Dettagli Commit", // Tradotto
-		"",                // Sottotitolo vuoto
-		container.NewVBox( // Contenitore per gli elementi del gruppo
-			commitAuthorLabel,
-			commitDateLabel,
-			widget.NewLabel("Messaggio Commit (modificabile):"), // Tradotto e reso esplicito
-			commitDescEntry, // Campo modificabile
-		),
-	)
-
-	// Layout principale della form
-	formLayout := container.NewVBox(
-		mainFormFields,
+		widget.NewLabel("Numero Ticket Interno (facoltativo):"), internalTicket,
+		widget.NewLabel("Numero Ticket Cliente (facoltativo):"), clientTicket,
 		widget.NewSeparator(),
-		commitDetailsGroup,
+		commitAuthorLabel,
+		commitDateLabel,
+		commitDescLabel,
 		widget.NewSeparator(),
 	)
 
-	// Wrap the form in a padded container
-	content := container.NewPadded(container.NewVScroll(formLayout))
-
-	// Layout dei bottoni
 	buttonLayout := container.NewGridWithColumns(3, saveBtn, addNoteBtn, closeBtn)
 
-	// Contenuto principale della finestra (form scrollabile e bottoni)
-	w.SetContent(container.NewVBox(
-		content,
+	w.SetContent(container.NewVScroll(container.NewVBox(
+		formLayout,
 		buttonLayout,
-	))
+	)))
 
-	// Imposta lo stato iniziale della label della descrizione e del tipo
+	// Imposta lo stato iniziale della label della descrizione
+	// È importante farlo dopo che il widget è stato creato e aggiunto al layout,
+	// ma qui lo facciamo all'inizio perché il suo valore iniziale dipende solo dallo stato del checkbox
+	// che è false di default.
 	excludedFromReleaseNote.OnChanged(excludedFromReleaseNote.Checked) // Esegui la funzione una volta all'avvio
-	if !excludedFromReleaseNote.Checked {                              // Se non è escluso, imposta il tipo predefinito
-		tipo.SetSelected("Generico")
-	}
 
 	w.ShowAndRun()
 }

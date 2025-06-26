@@ -10,6 +10,31 @@
       "commitDesc": "provanuova",
       "commitDate": "2025-06-26 14:37:25 +0200",
       "excludedFromReleaseNote": true
+    },
+    {
+      "data": "2025-06-26",
+      "tipo": "Generico",
+      "modulo": "CDV",
+      "descrizione": "prova della descrizione andante con moto",
+      "internalTicket": "1",
+      "clientTicket": "2",
+      "commitAuthor": "cammoranesi",
+      "commitDesc": "prova molto bella",
+      "commitDate": "2025-06-26 15:00:24 +0200",
+      "excludedFromReleaseNote": false
+    },
+    {
+      "data": "2025-06-26",
+      "tipo": "Funzionalità",
+      "modulo": "CMS",
+      "titolo": "Questo titolo lo metto",
+      "descrizione": "la vispa teresa aveala vispa teresa aveala vispa teresa aveala vispa teresa avea",
+      "internalTicket": "1",
+      "clientTicket": "2",
+      "commitAuthor": "cammoranesi",
+      "commitDesc": "prova molto bella ma nuova",
+      "commitDate": "2025-06-26 15:00:24 +0200",
+      "excludedFromReleaseNote": false
     }
   ]
 }
