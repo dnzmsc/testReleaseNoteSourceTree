@@ -2,123 +2,13 @@
   "releases": [
     {
       "data": "2025-06-26",
-      "tipo": "Fix",
-      "modulo": "",
-      "descrizione": "a",
-      "commitAuthor": "cammoranesi",
-      "commitDesc": "test",
-      "commitDate": "2025-06-26 12:05:29 +0200",
-      "excludedFromReleaseNote": true
-    },
-    {
-      "data": "2025-06-26",
-      "tipo": "Feature",
-      "modulo": "",
-      "descrizione": "a",
-      "commitAuthor": "cammoranesi",
-      "commitDesc": "aaa",
-      "commitDate": "2025-06-26 12:09:06 +0200",
-      "excludedFromReleaseNote": true
-    },
-    {
-      "data": "2025-06-26",
-      "tipo": "",
-      "modulo": "",
-      "descrizione": "a",
-      "commitAuthor": "cammoranesi",
-      "commitDesc": "a",
-      "commitDate": "2025-06-26 12:10:58 +0200",
-      "excludedFromReleaseNote": true
-    },
-    {
-      "data": "2025-06-26",
-      "tipo": "Feature",
-      "modulo": "",
-      "descrizione": "a",
-      "commitAuthor": "cammoranesi",
-      "commitDesc": "test",
-      "commitDate": "2025-06-26 12:24:05 +0200",
-      "excludedFromReleaseNote": true
-    },
-    {
-      "data": "2025-06-26",
-      "tipo": "Feature",
-      "modulo": "CMS",
-      "titolo": "a",
-      "descrizione": "a",
-      "commitAuthor": "cammoranesi",
-      "commitDesc": "rr",
-      "commitDate": "2025-06-26 12:33:33 +0200",
-      "excludedFromReleaseNote": true
-    },
-    {
-      "data": "2025-06-26",
-      "tipo": "Feature",
-      "modulo": "",
-      "descrizione": "a",
-      "commitAuthor": "cammoranesi",
-      "commitDesc": "test",
-      "commitDate": "2025-06-26 12:35:56 +0200",
-      "excludedFromReleaseNote": true
-    },
-    {
-      "data": "2025-06-26",
-      "tipo": "Feature",
-      "modulo": "CMS",
-      "descrizione": "a",
-      "commitAuthor": "cammoranesi",
-      "commitDesc": "test",
-      "commitDate": "2025-06-26 12:36:53 +0200",
-      "excludedFromReleaseNote": true
-    },
-    {
-      "data": "2025-06-26",
-      "tipo": "Feature",
-      "modulo": "CMS",
-      "descrizione": "a",
-      "commitAuthor": "cammoranesi",
-      "commitDesc": "a",
-      "commitDate": "2025-06-26 12:43:22 +0200",
-      "excludedFromReleaseNote": true
-    },
-    {
-      "data": "2025-06-26",
       "tipo": "Feature",
       "modulo": "CDV",
       "descrizione": "a",
+      "internalTicket": "a",
       "commitAuthor": "cammoranesi",
-      "commitDesc": "a",
-      "commitDate": "2025-06-26 12:55:48 +0200",
-      "excludedFromReleaseNote": true
-    },
-    {
-      "data": "2025-06-26",
-      "tipo": "Feature",
-      "modulo": "CMS",
-      "descrizione": "a",
-      "commitAuthor": "cammoranesi",
-      "commitDesc": "a",
-      "commitDate": "2025-06-26 14:28:54 +0200",
-      "excludedFromReleaseNote": true
-    },
-    {
-      "data": "2025-06-26",
-      "tipo": "Feature",
-      "modulo": "CDV",
-      "descrizione": "asssfidanken",
-      "commitAuthor": "cammoranesi",
-      "commitDesc": "prova",
-      "commitDate": "2025-06-26 14:30:18 +0200",
-      "excludedFromReleaseNote": true
-    },
-    {
-      "data": "2025-06-26",
-      "tipo": "Feature",
-      "modulo": "CMS",
-      "descrizione": "aerea",
-      "commitAuthor": "cammoranesi",
-      "commitDesc": "prova2",
-      "commitDate": "2025-06-26 14:31:00 +0200",
+      "commitDesc": "provanuova",
+      "commitDate": "2025-06-26 14:37:25 +0200",
       "excludedFromReleaseNote": true
     }
   ]
