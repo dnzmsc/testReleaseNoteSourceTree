@@ -9,6 +9,16 @@
       "commitDesc": "test",
       "commitDate": "2025-06-26 12:05:29 +0200",
       "excludedFromReleaseNote": true
+    },
+    {
+      "data": "2025-06-26",
+      "tipo": "Feature",
+      "modulo": "",
+      "descrizione": "a",
+      "commitAuthor": "cammoranesi",
+      "commitDesc": "aaa",
+      "commitDate": "2025-06-26 12:09:06 +0200",
+      "excludedFromReleaseNote": true
     }
   ]
 }
