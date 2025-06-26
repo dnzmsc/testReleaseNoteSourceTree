@@ -3,46 +3,53 @@
 # prepare-commit-msg hook
 # Questo script viene eseguito da Git dopo che il messaggio di commit iniziale è stato creato
 # ma prima che il commit venga effettivamente creato.
+# Versione per DEBUGGING - Prova a includere release_notes.json nel commit corrente.
 
 # Abilita la modalità di debug (stampa i comandi eseguiti)
 set -x
 # Esci immediatamente se un comando fallisce (solo se non gestito esplicitamente)
-# Per questo script, disabilitiamo set -e temporaneamente attorno all'app per gestire l'exit code.
 
 # --- Configurazione ---
 APP="./release-notes-app"
 FILE_RELEASE_NOTES="release_notes.json"
-COMMIT_MSG_FILE="$1"
+COMMIT_MSG_FILE="$1" # Percorso al file del messaggio di commit temporaneo di Git
 
 # --- Inizio Esecuzione Hook ---
-echo "--- Running prepare-commit-msg hook ---"
+echo "----------------------------------------------------"
+echo "--- Inizio esecuzione prepare-commit-msg hook ---"
+echo "----------------------------------------------------"
+echo "DEBUG INFO: Percorso del file messaggio di commit: $COMMIT_MSG_FILE"
+echo "DEBUG INFO: Percorso dell'applicazione Fyne: $APP"
+echo "DEBUG INFO: Percorso del file Release Notes JSON: $FILE_RELEASE_NOTES"
 
 # 1. Salva il timestamp di modifica del file release_notes.json PRIMA di avviare l'app.
 BEFORE_RN_FILE=$(stat -f "%m" "$FILE_RELEASE_NOTES" 2>/dev/null || stat -c "%Y" "$FILE_RELEASE_NOTES" 2>/dev/null || echo "0")
-echo "DEBUG: Timestamp iniziale di $FILE_RELEASE_NOTES: $BEFORE_RN_FILE"
-echo "DEBUG: Stato dell'indice prima dell'app:"
+echo "DEBUG INFO: Timestamp iniziale di $FILE_RELEASE_NOTES: '$BEFORE_RN_FILE'"
+
+echo "DEBUG INFO: Stato della working directory e dell'indice (staging area) PRIMA di avviare l'app:"
 git status --porcelain # Mostra lo stato dei file in modo leggibile per script
+echo "----------------------------------------------------"
 
 # 2. Avvia l'applicazione Fyne.
-echo "DEBUG: Avvio applicazione GUI per le Release Notes..."
+echo "DEBUG INFO: Avvio applicazione GUI per le Release Notes..."
 # Disabilita set -e temporaneamente per controllare l'exit code dell'app manualmente
 set +e
 "$APP" "$COMMIT_MSG_FILE"
 APP_EXIT_CODE=$?
 set -e # Riabilita set -e
 
-# 3. Controlla il codice di uscita (exit code) dell'applicazione Fyne.
+echo "DEBUG INFO: Applicazione Fyne terminata con Exit Code: $APP_EXIT_CODE"
 if [ "$APP_EXIT_CODE" -ne 0 ]; then
-    echo "--- Hook Aborted ---"
-    echo "❌ L'applicazione per le Release Notes è stata chiusa con richiesta di annullamento o ha riscontrato un errore (Exit Code: $APP_EXIT_CODE)."
+    echo "----------------------------------------------------"
+    echo "❌ L'applicazione per le Release Notes è stata chiusa con richiesta di annullamento o ha riscontrato un errore."
     echo "Commit annullato."
     exit 1 # Segnala a Git di annullare il commit
 fi
 
 # 4. Verifica la presenza del file release_notes.json dopo l'esecuzione dell'app.
 if [ ! -f "$FILE_RELEASE_NOTES" ]; then
-    echo "--- Hook Aborted ---"
-    echo "❌ File $FILE_RELEASE_NOTES mancante dopo l'esecuzione dell'applicazione."
+    echo "----------------------------------------------------"
+    echo "❌ ERRORE: File $FILE_RELEASE_NOTES mancante dopo l'esecuzione dell'applicazione."
     echo "Assicurati che l'app abbia i permessi per creare/scrivere il file."
     echo "Commit annullato."
     exit 1
@@ -50,11 +57,11 @@ fi
 
 # 5. Verifica se il file release_notes.json è stato effettivamente modificato dall'app.
 AFTER_RN_FILE=$(stat -f "%m" "$FILE_RELEASE_NOTES" 2>/dev/null || stat -c "%Y" "$FILE_RELEASE_NOTES")
-echo "DEBUG: Timestamp finale di $FILE_RELEASE_NOTES: $AFTER_RN_FILE"
+echo "DEBUG INFO: Timestamp finale di $FILE_RELEASE_NOTES: '$AFTER_RN_FILE'"
 
 if [ "$AFTER_RN_FILE" -le "$BEFORE_RN_FILE" ]; then
-    echo "--- Hook Aborted ---"
-    echo "❌ Il file $FILE_RELEASE_NOTES non è stato modificato dall'applicazione."
+    echo "----------------------------------------------------"
+    echo "❌ ERRORE: Il file $FILE_RELEASE_NOTES non è stato modificato dall'applicazione."
     echo "Assicurati di aver compilato e salvato almeno una nota di release nella GUI."
     echo "Commit annullato."
     exit 1
@@ -74,36 +81,44 @@ try:
         print('INVALID_DATE')
 except (FileNotFoundError, json.JSONDecodeError, IndexError, KeyError) as e:
     print('INVALID_DATE')
-    sys.stderr.write(f'DEBUG: Python script error: {e}\\n') # Debugging per errori Python
+    sys.stderr.write(f'DEBUG PYTHON ERROR: {e}\\n')
 ")
 
-echo "DEBUG: Data dell'ultima release nel file: '$LAST_DATE' (attesa: '$TODAY')"
+echo "DEBUG INFO: Data dell'ultima release nel file: '$LAST_DATE' (attesa: '$TODAY')"
 if [ "$LAST_DATE" != "$TODAY" ]; then
-    echo "--- Hook Aborted ---"
-    echo "❌ L'ultima release nel file $FILE_RELEASE_NOTES non è stata aggiornata a oggi ($LAST_DATE)."
+    echo "----------------------------------------------------"
+    echo "❌ ERRORE: L'ultima release nel file $FILE_RELEASE_NOTES non è stata aggiornata a oggi ($LAST_DATE)."
     echo "Assicurati di aver salvato una nota per la data corrente."
     echo "Commit annullato."
     exit 1
 fi
 
 # 7. Aggiungi il file delle release notes all'area di staging del commit corrente.
-echo "DEBUG: Stato dell'indice prima di git add:"
+echo "----------------------------------------------------"
+echo "DEBUG INFO: Tentativo di aggiungere $FILE_RELEASE_NOTES all'indice."
+echo "DEBUG INFO: Stato dell'indice (staging area) PRIMA di 'git add':"
 git status --porcelain
-echo "DEBUG: Esecuzione di: git add \"$FILE_RELEASE_NOTES\""
-git add "$FILE_RELEASE_NOTES" # Rimosso -f dato che .gitignore è vuoto.
 
-# Verifica immediata che il file sia nell'indice
+echo "DEBUG INFO: Esecuzione di: git add \"$FILE_RELEASE_NOTES\""
+git add "$FILE_RELEASE_NOTES"
+
+# Verifica immediata che il file sia nell'indice.
 if ! git ls-files --error-unmatch "$FILE_RELEASE_NOTES" > /dev/null 2>&1; then
-    echo "--- Hook Aborted ---"
-    echo "❌ ERRORE CRITICO: Il file $FILE_RELEASE_NOTES non è stato aggiunto correttamente all'indice di Git."
-    echo "Il commit non può proseguire per evitare problemi."
+    echo "----------------------------------------------------"
+    echo "❌ ERRORE CRITICO: Il file $FILE_RELEASE_NOTES NON È STATO AGGIUNTO CORRETTAMENTE all'indice di Git."
+    echo "Questo significa che non sarà incluso nel commit. Commit annullato per evitare incoerenze."
+    echo "----------------------------------------------------"
     exit 1
 fi
 
-echo "DEBUG: Stato dell'indice dopo git add e verifica:"
+echo "DEBUG INFO: Il file $FILE_RELEASE_NOTES è stato VERIFICATO e si trova correttamente nell'indice."
+echo "DEBUG INFO: Stato dell'indice (staging area) DOPO 'git add' e verifica:"
 git status --porcelain
+echo "----------------------------------------------------"
 
-echo "✅ Release note aggiornata e aggiunta al commit."
-echo "--- Hook Finished Successfully ---"
+echo "✅ Release note aggiornata e correttamente aggiunta all'indice per il commit."
+echo "--- prepare-commit-msg hook TERMINATO CON SUCCESSO ---"
+echo "Git ora finalizzerà il commit, includendo $FILE_RELEASE_NOTES."
+echo "----------------------------------------------------"
 
-exit 0 # Se tutti i controlli passano, il commit può procedere normalmente.
+exit 0 # Permette a Git di finalizzare il commit normalmente.
