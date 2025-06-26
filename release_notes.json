@@ -161,6 +161,18 @@
       "commitDesc": "asdasdad",
       "commitDate": "2025-05-23 16:08:54 +0200",
       "excludedFromReleaseNote": false
+    },
+    {
+      "data": "2025-06-26",
+      "tipo": "Fix",
+      "modulo": "CDV",
+      "titolo": "test1",
+      "descrizione": "asdasdassdadqweqweqweqttytytytytytyt",
+      "internalTicket": "123",
+      "commitAuthor": "cammoranesi",
+      "commitDesc": "prova messaggio di commit bello",
+      "commitDate": "2025-06-26 11:45:12 +0200",
+      "excludedFromReleaseNote": false
     }
   ]
 }
