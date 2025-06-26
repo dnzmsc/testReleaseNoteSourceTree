@@ -173,6 +173,19 @@
       "commitDesc": "prova messaggio di commit bello",
       "commitDate": "2025-06-26 11:45:12 +0200",
       "excludedFromReleaseNote": false
+    },
+    {
+      "data": "2025-06-26",
+      "tipo": "Fix",
+      "modulo": "",
+      "titolo": "escluso 1",
+      "descrizione": "asdadasdsa",
+      "internalTicket": "11",
+      "clientTicket": "22",
+      "commitAuthor": "cammoranesi",
+      "commitDesc": "la violetta la va la va",
+      "commitDate": "2025-06-26 11:47:12 +0200",
+      "excludedFromReleaseNote": true
     }
   ]
 }

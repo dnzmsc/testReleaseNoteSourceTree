@@ -1,46 +1,78 @@
 #!/bin/sh
 
-# Definisci il percorso dell'applicazione e del file delle release notes
-# Compila la tua app Go con: go build -o release-notes-app
-# Poi metti l'eseguibile 'release-notes-app' nella stessa cartella .git/hooks/
-APP="./release-notes-app"
-FILE_RELEASE_NOTES="release_notes.json" # Rinominato per chiarezza
+# prepare-commit-msg hook
+# Questo script viene eseguito da Git dopo che il messaggio di commit iniziale è stato creato
+# ma prima che il commit venga effettivamente creato.
+# È il posto ideale per lanciare la GUI per le release notes,
+# in quanto può accedere al messaggio di commit temporaneo.
 
-# Il primo argomento di prepare-commit-msg è il percorso del file temporaneo del messaggio di commit
+# --- Configurazione ---
+# Definisci il percorso dell'applicazione Fyne compilata.
+# Assicurati che l'eseguibile 'release-notes-app' e il file 'modules.json'
+# siano stati copiati in questa stessa directory (.git/hooks/) dopo la compilazione.
+APP="./release-notes-app"
+
+# Definisci il nome del file JSON delle release notes.
+# Questo file verrà creato o aggiornato dalla tua applicazione Fyne.
+FILE_RELEASE_NOTES="release_notes.json"
+
+# Il primo argomento passato a questo hook è il percorso del file temporaneo
+# che contiene il messaggio di commit che l'utente ha appena digitato.
 COMMIT_MSG_FILE="$1"
 
+# --- Inizio Esecuzione Hook ---
 echo "Running prepare-commit-msg hook..."
+echo "-----------------------------------------"
 
-# Salva lo stato di modifica del file release_notes.json prima di avviare l'app
+# 1. Salva il timestamp di modifica del file release_notes.json PRIMA di avviare l'app.
+# Questo ci servirà per verificare se il file è stato effettivamente aggiornato dopo.
+# 'stat -f "%m"' è per macOS, 'stat -c "%Y"' è per Linux.
+# '2>/dev/null' sopprime gli errori se il file non esiste ancora.
+# '|| echo "0"' imposta un valore di default se il file non esiste (per il primo commit).
 BEFORE_RN_FILE=$(stat -f "%m" "$FILE_RELEASE_NOTES" 2>/dev/null || stat -c "%Y" "$FILE_RELEASE_NOTES" 2>/dev/null || echo "0")
+echo "Timestamp iniziale di $FILE_RELEASE_NOTES: $BEFORE_RN_FILE"
 
+# 2. Avvia l'applicazione Fyne.
+# Passiamo il percorso del file del messaggio di commit come argomento.
+# L'applicazione Fyne gestirà tutta la logica di input, salvataggio e validazione.
 echo "✅ Avvio applicazione GUI per le Release Notes..."
-# Avvia l'applicazione Fyne, passando il percorso del file del messaggio di commit come argomento.
 "$APP" "$COMMIT_MSG_FILE"
 
-# Controlla il codice di uscita dell'applicazione Fyne.
-# Se l'applicazione termina con un errore (ad esempio, l'utente ha annullato il salvataggio),
-# il commit verrà annullato.
+# 3. Controlla il codice di uscita (exit code) dell'applicazione Fyne.
+# Se l'app Fyne è stata chiusa dall'utente con l'opzione "Chiudi senza salvare e annulla il commit",
+# essa terminerà con un codice di uscita 1 (errore), indicando che il commit deve essere annullato.
 if [ $? -ne 0 ]; then
-    echo "❌ L'applicazione per le Release Notes è stata chiusa o ha riscontrato un errore. Commit annullato."
-    exit 1
+    echo "-----------------------------------------"
+    echo "❌ L'applicazione per le Release Notes è stata chiusa con richiesta di annullamento o ha riscontrato un errore."
+    echo "Commit annullato."
+    exit 1 # Segnala a Git di annullare il commit
 fi
 
-# Verifica presenza file release_notes.json
+# 4. Verifica la presenza del file release_notes.json dopo l'esecuzione dell'app.
+# Anche se l'app dovrebbe crearlo o modificarlo, è una precauzione.
 if [ ! -f "$FILE_RELEASE_NOTES" ]; then
-    echo "❌ File $FILE_RELEASE_NOTES mancante dopo l'esecuzione dell'applicazione. Commit annullato."
-    exit 1
-fi
-
-# Verifica modifica file release_notes.json
-AFTER_RN_FILE=$(stat -f "%m" "$FILE_RELEASE_NOTES" 2>/dev/null || stat -c "%Y" "$FILE_RELEASE_NOTES")
-if [ "$AFTER_RN_FILE" -le "$BEFORE_RN_FILE" ]; then
-    echo "❌ Il file $FILE_RELEASE_NOTES non è stato modificato dall'applicazione. Assicurati di aver salvato almeno una nota."
+    echo "-----------------------------------------"
+    echo "❌ File $FILE_RELEASE_NOTES mancante dopo l'esecuzione dell'applicazione."
+    echo "Assicurati che l'app abbia i permessi per creare/scrivere il file."
     echo "Commit annullato."
     exit 1
 fi
 
-# Verifica data ultima release nel file release_notes.json
+# 5. Verifica se il file release_notes.json è stato effettivamente modificato dall'app.
+# Confronta il timestamp attuale con quello salvato prima dell'avvio dell'app.
+AFTER_RN_FILE=$(stat -f "%m" "$FILE_RELEASE_NOTES" 2>/dev/null || stat -c "%Y" "$FILE_RELEASE_NOTES")
+echo "Timestamp finale di $FILE_RELEASE_NOTES: $AFTER_RN_FILE"
+
+if [ "$AFTER_RN_FILE" -le "$BEFORE_RN_FILE" ]; then
+    echo "-----------------------------------------"
+    echo "❌ Il file $FILE_RELEASE_NOTES non è stato modificato dall'applicazione."
+    echo "Assicurati di aver compilato e salvato almeno una nota di release nella GUI."
+    echo "Commit annullato."
+    exit 1
+fi
+
+# 6. Verifica che l'ultima release nel file JSON abbia la data di oggi.
+# Questo è un controllo di coerenza per assicurarsi che le note siano sempre aggiornate.
 TODAY=$(date +%Y-%m-%d)
 LAST_DATE=$(python3 -c "
 import json
@@ -48,21 +80,30 @@ try:
     with open('$FILE_RELEASE_NOTES') as f:
         data = json.load(f)
     if 'releases' in data and len(data['releases']) > 0:
+        # Recupera la data dell'ultima release nell'array
         print(data['releases'][-1]['data'])
     else:
-        print('INVALID_DATE') # Nessuna release o formato non corretto
+        # Se non ci sono release o il formato è inatteso
+        print('INVALID_DATE')
 except (FileNotFoundError, json.JSONDecodeError, IndexError, KeyError):
-    print('INVALID_DATE') # Errore nella lettura o parsing
+    # Gestisce vari errori di file o JSON malformato
+    print('INVALID_DATE')
 ")
 
+echo "Data dell'ultima release nel file: $LAST_DATE (attesa: $TODAY)"
 if [ "$LAST_DATE" != "$TODAY" ]; then
-    echo "❌ L'ultima release nel file $FILE_RELEASE_NOTES non è stata aggiornata a oggi ($LAST_DATE). Commit annullato."
+    echo "-----------------------------------------"
+    echo "❌ L'ultima release nel file $FILE_RELEASE_NOTES non è stata aggiornata a oggi ($LAST_DATE)."
+    echo "Assicurati di aver salvato una nota per la data corrente."
+    echo "Commit annullato."
     exit 1
 fi
 
-# Aggiungi il file delle release notes all'area di staging
-# Questo è l'ultimo passaggio per assicurare che le modifiche al JSON siano incluse nel commit.
+# 7. Aggiungi il file delle release notes all'area di staging del commit corrente.
+# Questo è cruciale: garantisce che le modifiche al JSON siano incluse nel commit che si sta creando.
+# Essendo un prepare-commit-msg hook, 'git add' qui modifica il commit attuale, non ne crea uno nuovo.
 git add "$FILE_RELEASE_NOTES"
 echo "✅ Release note aggiornata e aggiunta al commit."
+echo "-----------------------------------------"
 
-exit 0 # Il commit può proseguire
+exit 0 # Se tutti i controlli passano, il commit può procedere normalmente.
