@@ -76,6 +76,17 @@
       "commitDate": "2025-06-26 17:43:00 +0200",
       "commitHash": "9bb944db0a81b0279e73a95c14d21dbdf226e9b0",
       "excludedFromReleaseNote": true
+    },
+    {
+      "data": "26/06/2025 17:44:31",
+      "tipo": "Generico",
+      "modulo": "",
+      "descrizione": "z",
+      "commitAuthor": "cammoranesi",
+      "commitDesc": "prova",
+      "commitDate": "2025-06-26 17:44:04 +0200",
+      "commitHash": "a4df96aaf389edf399acb221d15fcd2c5ebd227a",
+      "excludedFromReleaseNote": true
     }
   ]
 }
