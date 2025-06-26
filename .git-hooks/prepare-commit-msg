@@ -1,13 +1,13 @@
 #!/bin/sh
 
 # prepare-commit-msg hook
-# Questo script ora non solo prepara il messaggio, ma esegue anche il commit finale
-# per garantire che release_notes.json sia incluso nello stesso commit.
+# Versione FINALE - TENTATIVO DI FIX LOOP INFINITO e INCLUSIONE FILE
+# Obiettivo: Eseguire il commit finale dall'hook senza loop e includendo release_notes.json.
 
 # NOTA: Questa configurazione del LOG_FILE assume che lo script si trovi in '.git-hooks/'
 LOG_FILE="./.git-hooks/prepare-commit-msg.log"
 exec > "$LOG_FILE" 2>&1
-echo "--- Inizio Log prepare-commit-msg (SOLUZIONE SPORCA): $(date) ---"
+echo "--- Inizio Log prepare-commit-msg (TENTATIVO FINALE): $(date) ---"
 
 # Abilita la modalità di debug (stampa i comandi eseguiti)
 set -x
@@ -17,6 +17,17 @@ set -x
 APP="./release-notes-app"
 FILE_RELEASE_NOTES="release_notes.json"
 COMMIT_MSG_FILE="$1" # Percorso al file del messaggio di commit temporaneo di Git
+
+# Protezione anti-loop:
+# Se questa variabile è già settata, significa che siamo in un'esecuzione ricorsiva.
+# Questo è un meccanismo più robusto di --no-verify per alcuni client.
+if [ -n "$GIT_INSIDE_HOOK_COMMIT" ]; then
+    echo "DEBUG INFO: Rilevata esecuzione ricorsiva del commit all'interno dell'hook."
+    echo "DEBUG INFO: Uscita per prevenire loop infinito."
+    # Usciamo con 0 per non fallire il commit originale, ma senza ri-eseguire l'intera logica dell'hook.
+    exit 0
+fi
+export GIT_INSIDE_HOOK_COMMIT=true # Setta la variabile per le chiamate successive
 
 # --- Inizio Esecuzione Hook ---
 echo "----------------------------------------------------"
@@ -31,13 +42,12 @@ BEFORE_RN_FILE=$(stat -f "%m" "$FILE_RELEASE_NOTES" 2>/dev/null || stat -c "%Y" 
 echo "DEBUG INFO: Timestamp iniziale di $FILE_RELEASE_NOTES: '$BEFORE_RN_FILE'"
 
 echo "DEBUG INFO: Stato della working directory e dell'indice (staging area) PRIMA di avviare l'app:"
-git status --porcelain
+git status --porcelain 
 echo "----------------------------------------------------"
 
 # 2. Avvia l'applicazione Fyne.
 echo "DEBUG INFO: Avvio applicazione GUI per le Release Notes..."
-# Disabilita set -e temporaneamente per controllare l'exit code dell'app manualmente
-set +e
+set +e # Disabilita set -e temporaneamente
 "$APP" "$COMMIT_MSG_FILE"
 APP_EXIT_CODE=$?
 set -e # Riabilita set -e
@@ -47,7 +57,7 @@ if [ "$APP_EXIT_CODE" -ne 0 ]; then
     echo "----------------------------------------------------"
     echo "❌ L'applicazione per le Release Notes è stata chiusa con richiesta di annullamento o ha riscontrato un errore."
     echo "Commit annullato."
-    exit 1 # Segnala a Git di annullare il commit
+    exit 1
 fi
 
 # 4. Verifica la presenza del file release_notes.json dopo l'esecuzione dell'app.
@@ -88,7 +98,7 @@ except (FileNotFoundError, json.JSONDecodeError, IndexError, KeyError) as e:
     sys.stderr.write(f'DEBUG PYTHON ERROR: {e}\\n')
 ")
 
-echo "DEBUG INFO: Data dell'ultima release nel file: '$LAST_DATE' (attesa: '$TODAY')"
+echo "DEBUG INFO: Data dell'ultima release nel file: '$LAST_DATE' (attesa: '$TODAY')" 
 if [ "$LAST_DATE" != "$TODAY" ]; then
     echo "----------------------------------------------------"
     echo "❌ ERRORE: L'ultima release nel file $FILE_RELEASE_NOTES non è stata aggiornata a oggi ($LAST_DATE)."
@@ -97,16 +107,15 @@ if [ "$LAST_DATE" != "$TODAY" ]; then
     exit 1
 fi
 
-# --- NUOVA LOGICA DI COMMIT (SOLUZIONE SPORCA) ---
-# A questo punto, tutte le validazioni sono passate e l'app Fyne ha modificato release_notes.json.
+# --- LOGICA DI COMMIT (Aggressiva ma necessaria dato il contesto) ---
 
 echo "----------------------------------------------------"
-echo "DEBUG INFO: Tentativo di aggiungere $FILE_RELEASE_NOTES all'indice."
-echo "DEBUG INFO: Stato dell'indice (staging area) PRIMA di 'git add' (dovrebbe essere MM dopo l'app):"
-git status --porcelain
+echo "DEBUG INFO: Tentativo di aggiungere $FILE_RELEASE_NOTES all'indice." 
+echo "DEBUG INFO: Stato dell'indice (staging area) PRIMA di 'git add' (dovrebbe essere MM dopo l'app):" 
+git status --porcelain 
 
-echo "DEBUG INFO: Esecuzione di: git add \"$FILE_RELEASE_NOTES\""
-git add "$FILE_RELEASE_NOTES"
+echo "DEBUG INFO: Esecuzione di: git add \"$FILE_RELEASE_NOTES\"" 
+git add "$FILE_RELEASE_NOTES" 
 
 # Verifica immediata che il file sia nell'indice.
 if ! git ls-files --error-unmatch "$FILE_RELEASE_NOTES" > /dev/null 2>&1; then
@@ -117,17 +126,20 @@ if ! git ls-files --error-unmatch "$FILE_RELEASE_NOTES" > /dev/null 2>&1; then
     exit 1
 fi
 
-echo "DEBUG INFO: Il file $FILE_RELEASE_NOTES è stato VERIFICATO e si trova correttamente nell'indice."
-echo "DEBUG INFO: Stato dell'indice (staging area) DOPO 'git add' e verifica (dovrebbe essere A o M senza spazi iniziali):"
-git status --porcelain
+echo "DEBUG INFO: Il file $FILE_NOTES è stato VERIFICATO e si trova correttamente nell'indice." 
+echo "DEBUG INFO: Stato dell'indice (staging area) DOPO 'git add' e verifica (dovrebbe essere A o M senza spazi iniziali):" 
+git status --porcelain 
 echo "----------------------------------------------------"
 
 echo "DEBUG INFO: Finalizzazione del commit con il messaggio da '$COMMIT_MSG_FILE'..."
 
 # Esegui il commit effettivo.
-# --no-verify: Evita loop infiniti di hook.
+# GIT_EDITOR=true impedisce l'apertura di un editor testuale.
+# < /dev/null redirige l'input standard per evitare che il comando attenda un input.
+# --no-verify: Evita loop di hook (se supportato da SourceTree).
 # -q: Sopprime l'output normale del commit.
-git commit --file "$COMMIT_MSG_FILE" --no-verify -q
+# GIT_INDEX_FILE="$GIT_INDEX_FILE": Cerca di assicurare che il commit lavori sullo stesso indice.
+GIT_EDITOR=true GIT_INDEX_FILE="$GIT_INDEX_FILE" git commit --file "$COMMIT_MSG_FILE" --no-verify -q < /dev/null
 
 # Verifica il successo del commit.
 if [ $? -ne 0 ]; then
@@ -137,9 +149,12 @@ if [ $? -ne 0 ]; then
     exit 1
 fi
 
-echo "✅ Commit finalizzato con successo, includendo $FILE_RELEASE_NOTES."
-echo "--- prepare-commit-msg hook TERMINATO CON SUCCESSO ---"
-echo "Git originale (SourceTree) ora non dovrebbe più committare."
+echo "✅ Commit finalizzato con successo, includendo $FILE_RELEASE_NOTES." 
+echo "--- prepare-commit-msg hook TERMINATO CON SUCCESSO ---" 
+echo "Git originale (SourceTree) ora non dovrebbe più committare." 
 echo "----------------------------------------------------"
 
-exit 255 # Segnala al processo chiamante (SourceTree) che l'operazione è stata completata.
+# Questo exit code (255) segnala a Git/SourceTree che l'hook ha già gestito il commit,
+# indicando che non c'è più nulla da committare per il processo originale.
+# SourceTree dovrebbe interpretarlo come un successo e non tentare un altro commit.
+exit 255
