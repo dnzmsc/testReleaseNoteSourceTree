@@ -1,0 +1,37 @@
+{
+  "releases": [
+    {
+      "data": "26/06/2025 17:27:47",
+      "tipo": "Generico",
+      "modulo": "",
+      "descrizione": "a",
+      "commitAuthor": "cammoranesi",
+      "commitDesc": "prova",
+      "commitDate": "2025-06-26 17:25:00 +0200",
+      "commitHash": "284cd3707f1fb2e479b4eff494ce6dd83a338c74",
+      "excludedFromReleaseNote": true
+    },
+    {
+      "data": "26/06/2025 17:35:17",
+      "tipo": "Generico",
+      "modulo": "",
+      "descrizione": "a",
+      "commitAuthor": "cammoranesi",
+      "commitDesc": "proviamo ma non sono sicurp",
+      "commitDate": "2025-06-26 17:27:39 +0200",
+      "commitHash": "5958a4d43c84520b4ccb230b0d525f40abe99809",
+      "excludedFromReleaseNote": true
+    },
+    {
+      "data": "26/06/2025 17:39:07",
+      "tipo": "Generico",
+      "modulo": "",
+      "descrizione": "a",
+      "commitAuthor": "cammoranesi",
+      "commitDesc": "proviamo ma non sono sicurp",
+      "commitDate": "2025-06-26 17:27:39 +0200",
+      "commitHash": "5958a4d43c84520b4ccb230b0d525f40abe99809",
+      "excludedFromReleaseNote": true
+    }
+  ]
+}
