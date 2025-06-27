@@ -1,19 +1,38 @@
 
 #!/bin/bash
 
-# Argomenti: $1 = commit-msg-file, $2 = commit source (es. message), $3 = SHA-1
-MSG_FILE="$1"
-FILE="release_notes.json"
+COMMIT_MSG_FILE="$1"
+COMMIT_SOURCE="$2"
+SHA1="$3"
 
-# Percorso eseguibile dell'app (modifica se necessario)
-APP="./release-notes-app"
+# Evita merge, squash, ecc.
+if [[ "$COMMIT_SOURCE" == "merge" || "$COMMIT_SOURCE" == "squash" || "$COMMIT_SOURCE" == "commit" ]]; then
+  exit 0
+fi
 
-# Verifica che il file del commit esista
-[ -f "$MSG_FILE" ] || exit 1
+RELEASE_NOTES_APP="./release-notes-app"
+RELEASE_NOTES_FILE="release_notes.json"
 
-# Esegui l'app passando il messaggio (o una stringa fittizia se vuoto)
-COMMIT_MSG=$(cat "$MSG_FILE")
-"$APP" --message "$COMMIT_MSG"
+# Verifica se l'app è eseguibile
+if [ ! -x "$RELEASE_NOTES_APP" ]; then
+  echo "Errore: $RELEASE_NOTES_APP non trovato o non eseguibile" >&2
+  exit 1
+fi
+
+# Avvia l'app, passando il file del messaggio
+"$RELEASE_NOTES_APP" "$COMMIT_MSG_FILE"
+STATUS=$?
+
+if [ $STATUS -ne 0 ]; then
+  echo "Errore: compilazione release notes fallita (codice $STATUS)" >&2
+  exit 1
+fi
+
+# Verifica che il file release_note.json esista ed è stato aggiornato
+if [ ! -f "$RELEASE_NOTES_FILE" ]; then
+  echo "Errore: il file $RELEASE_NOTES_FILE non è stato creato." >&2
+  exit 1
+fi
 
 # Funzione per aspettare che il file sia stabile
 wait_for_stable_file() {
