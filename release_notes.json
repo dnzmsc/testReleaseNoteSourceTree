@@ -65,6 +65,28 @@
       "commitDate": "2025-06-27 12:10:58 +0200",
       "commitHash": "01139b7a5ea88d00301ae454892c791b4ab8d975",
       "excludedFromReleaseNote": true
+    },
+    {
+      "data": "27/06/2025 12:25:42",
+      "tipo": "Generico",
+      "modulo": "",
+      "descrizione": "acciderbola",
+      "commitAuthor": "cammoranesi",
+      "commitDesc": "acciderbola",
+      "commitDate": "2025-06-27 12:24:20 +0200",
+      "commitHash": "05f1896754693171454ef027c92d3319e2e22e86",
+      "excludedFromReleaseNote": true
+    },
+    {
+      "data": "27/06/2025 12:29:11",
+      "tipo": "Generico",
+      "modulo": "",
+      "descrizione": "asert",
+      "commitAuthor": "cammoranesi",
+      "commitDesc": "santini",
+      "commitDate": "2025-06-27 12:25:31 +0200",
+      "commitHash": "2a3e79a5b4cceff69fed4688bfe1f3cb4c327ff9",
+      "excludedFromReleaseNote": true
     }
   ]
 }
