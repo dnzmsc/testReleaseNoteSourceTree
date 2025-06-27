@@ -219,6 +219,17 @@
       "commitDate": "2025-06-27 11:11:00 +0200",
       "commitHash": "02fe19402ad7e984c485dbdb38c03c8e615709af",
       "excludedFromReleaseNote": true
+    },
+    {
+      "data": "27/06/2025 11:14:52",
+      "tipo": "Generico",
+      "modulo": "",
+      "descrizione": "asa",
+      "commitAuthor": "cammoranesi",
+      "commitDesc": "Riparto hook",
+      "commitDate": "2025-06-27 11:14:20 +0200",
+      "commitHash": "c0ec8c0336276084899466788e8f8f712f5d57fe",
+      "excludedFromReleaseNote": true
     }
   ]
 }
