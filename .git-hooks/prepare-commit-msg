@@ -23,7 +23,7 @@ ERROR_LOG() { log_message "ERROR" "$1"; echo "❌ ERRORE: $1" >> /dev/stderr; }
 DEBUG_LOG_STDOUT() { while IFS= read -r line; do log_message "STDOUT" "$line"; echo "$line" >> /dev/stderr; done; }
 
 # Clear previous log at the start of execution
-echo "--- Inizio Log prepare-commit-msg (SOLUZIONE DEFINITIVA): $(date) ---" > "$LOG_FILE"
+echo "--- Inizio Log prepare-commit-msg (SOLUZIONE FINALE v3.0): $(date) ---" > "$LOG_FILE"
 echo "----------------------------------------------------" >> "$LOG_FILE"
 echo "--- Inizio esecuzione prepare-commit-msg hook ---" >> "$LOG_FILE"
 echo "----------------------------------------------------" >> "$LOG_FILE"
@@ -52,13 +52,18 @@ wait_for_stable_file() {
     local file_to_check="$1"
     local prev_hash=""
     local same_count=0
-    local max_wait_time=10 # Tempo massimo di attesa in secondi
-    local elapsed_time=0
+    local max_wait_time_seconds=10 # Tempo massimo di attesa in secondi
+    local sleep_interval_seconds=0.2 # Intervallo di sleep
 
-    DEBUG_LOG "Inizio attesa stabilità per il file: $file_to_check"
-    while [ "$elapsed_time" -lt "$max_wait_time" ]; do
-        sleep 0.2
-        elapsed_time=$(echo "scale=1; $elapsed_time + 0.2" | bc) # Aggiorna tempo trascorso
+    # Converti tutto in millisecondi per aritmetica intera in bash
+    local max_wait_time_ms=$((max_wait_time_seconds * 1000))
+    local sleep_interval_ms=$(echo "$sleep_interval_seconds * 1000" | bc) # Usa bc per il calcolo iniziale se sleep_interval_seconds è float
+    local elapsed_time_ms=0
+
+    DEBUG_LOG "Inizio attesa stabilità per il file: $file_to_check (max ${max_wait_time_seconds}s)"
+    while [ "$elapsed_time_ms" -lt "$max_wait_time_ms" ]; do
+        sleep "$sleep_interval_seconds"
+        elapsed_time_ms=$((elapsed_time_ms + sleep_interval_ms))
 
         # Controlla se il file esiste prima di calcolare lo shasum
         if [ ! -f "$file_to_check" ]; then
@@ -79,18 +84,18 @@ wait_for_stable_file() {
 
         if [ "$current_hash" = "$prev_hash" ]; then
             ((same_count++))
-            if [ "$same_count" -ge 2 ]; then # Richiede 2 letture consecutive identiche
-                DEBUG_LOG "File $file_to_check stabile dopo $elapsed_time secondi."
+            if [ "$same_count" -ge 2 ]; then # Richiede 2 letture consecutive identiche per stabilità
+                DEBUG_LOG "File $file_to_check stabile dopo $((elapsed_time_ms / 1000)).$(( (elapsed_time_ms % 1000) / 100))s."
                 return 0 # File stabile
             fi
         else
             same_count=0
             prev_hash="$current_hash"
         fi
-        DEBUG_LOG "Attesa stabilità per $file_to_check... $(printf "%.1f" "$elapsed_time")s / ${max_wait_time}s"
+        DEBUG_LOG "Attesa stabilità per $file_to_check... $((elapsed_time_ms / 1000)).$(( (elapsed_time_ms % 1000) / 100))s / ${max_wait_time_seconds}s"
     done
 
-    ERROR_LOG "Errore: Il file $file_to_check non è diventato stabile entro il tempo massimo."
+    ERROR_LOG "Errore: Il file $file_to_check non è diventato stabile entro il tempo massimo di ${max_wait_time_seconds} secondi."
     return 1 # File non stabile in tempo
 }
 # --------------------------------------------------------------------------------------

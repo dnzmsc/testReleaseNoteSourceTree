@@ -142,6 +142,17 @@
       "commitDate": "2025-06-27 12:39:40 +0200",
       "commitHash": "75dc77b40c8ae804baedaafcece948cf7007f14f",
       "excludedFromReleaseNote": true
+    },
+    {
+      "data": "27/06/2025 12:47:57",
+      "tipo": "Generico",
+      "modulo": "",
+      "descrizione": "santini cuzzato",
+      "commitAuthor": "cammoranesi",
+      "commitDesc": "santini cuzzato",
+      "commitDate": "2025-06-27 12:46:57 +0200",
+      "commitHash": "33b364308f6a98cfeadf05485d50cab87d24b90f",
+      "excludedFromReleaseNote": true
     }
   ]
 }
