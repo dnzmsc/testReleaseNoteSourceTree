@@ -69,7 +69,9 @@ git status --porcelain | DEBUG_LOG_STDOUT
 
 INFO_LOG "----------------------------------------------------"
 INFO_LOG "DEBUG INFO: Avvio applicazione GUI per le Release Notes..."
-"$APP" "$FILE_RELEASE_NOTES" >> "$LOG_FILE" 2>&1
+# CORREZIONE CRITICA: Passa il file del messaggio di commit reale ($COMMIT_MSG_FILE) all'app Fyne.
+# L'app Fyne si aspetta questo come argomento 1 per leggere il messaggio di commit.
+"$APP" "$COMMIT_MSG_FILE" >> "$LOG_FILE" 2>&1
 APP_EXIT_CODE=$?
 INFO_LOG "DEBUG INFO: Applicazione Fyne terminata con Exit Code: $APP_EXIT_CODE"
 
