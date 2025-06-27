@@ -1,60 +1,232 @@
-
 #!/bin/bash
 
-COMMIT_MSG_FILE="$1"
-COMMIT_SOURCE="$2"
+# Configuration
+APP="./release-notes-app"
+FILE_RELEASE_NOTES="release_notes.json"
+COMMIT_MSG_FILE="$1" # The path to the commit message file
 
-RELEASE_NOTES_APP="./release-notes-app"
-RELEASE_NOTES_FILE="release_notes.json"
+# --- Logging Functions ---
+LOG_FILE=".git-hooks/prepare-commit-msg.log"
 
-# Evita merge, squash, ecc.
-if [[ "$COMMIT_SOURCE" == "merge" || "$COMMIT_SOURCE" == "squash" || "$COMMIT_SOURCE" == "commit" ]]; then
-  exit 0
-fi
-
-# Verifica se l'app è eseguibile
-if [ ! -x "$RELEASE_NOTES_APP" ]; then
-  echo "Errore: $RELEASE_NOTES_APP non trovato o non eseguibile" >&2
-  exit 1
-fi
-
-# Avvia l’app per compilare le note di rilascio
-"$RELEASE_NOTES_APP" "$COMMIT_MSG_FILE"
-STATUS=$?
-
-if [ $STATUS -ne 0 ]; then
-  echo "Errore: compilazione release notes fallita (codice $STATUS)" >&2
-  exit 1
-fi
-
-# Funzione per attendere che il file sia stabile
-wait_for_stable_file() {
-  local file="$1"
-  local prev_hash=""
-  local same_count=0
-  while true; do
-    sleep 0.2
-    local hash=$(shasum "$file" 2>/dev/null | awk '{ print $1 }')
-    if [ "$hash" = "$prev_hash" ]; then
-      ((same_count++))
-      if [ "$same_count" -ge 2 ]; then
-        break
-      fi
-    else
-      same_count=0
-      prev_hash="$hash"
-    fi
-  done
+# Function to log messages with timestamp and script name
+log_message() {
+    local type="$1" # e.g., INFO, DEBUG, ERROR
+    local message="$2"
+    echo "$(date '+%Y-%m-%d %H:%M:%S') [$type] $message" >> "$LOG_FILE"
 }
 
-# Attende e stagea il file
-if [ -f "$RELEASE_NOTES_FILE" ]; then
-  wait_for_stable_file "$RELEASE_NOTES_FILE"
-  git add "$RELEASE_NOTES_FILE"
+# Functions for different log levels
+DEBUG_LOG() { log_message "DEBUG" "$1"; echo "DEBUG INFO: $1" >> /dev/stderr; }
+INFO_LOG() { log_message "INFO" "$1"; echo "INFO: $1" >> /dev/stderr; }
+ERROR_LOG() { log_message "ERROR" "$1"; echo "❌ ERRORE: $1" >> /dev/stderr; }
+# Function to log output of commands directly to stderr and file
+DEBUG_LOG_STDOUT() { while IFS= read -r line; do log_message "STDOUT" "$line"; echo "$line" >> /dev/stderr; done; }
+
+# Clear previous log at the start of execution
+echo "--- Inizio Log prepare-commit-msg (SOLUZIONE DEFINITIVA): $(date) ---" > "$LOG_FILE"
+echo "----------------------------------------------------" >> "$LOG_FILE"
+echo "--- Inizio esecuzione prepare-commit-msg hook ---" >> "$LOG_FILE"
+echo "----------------------------------------------------" >> "$LOG_FILE"
+
+# Export a variable to signal the Go app it's being run from a Git hook (optional, ma utile per debug)
+export GIT_INSIDE_HOOK_COMMIT=true
+
+INFO_LOG "----------------------------------------------------"
+INFO_LOG "--- Inizio esecuzione prepare-commit-msg hook ---"
+INFO_LOG "----------------------------------------------------"
+
+DEBUG_LOG "Percorso del file messaggio di commit: $COMMIT_MSG_FILE"
+DEBUG_LOG "Percorso dell'applicazione Fyne: $APP"
+DEBUG_LOG "Percorso del file Release Notes JSON: $FILE_RELEASE_NOTES"
+
+# Ensure the hook is run from the root of the repository
+REPO_ROOT=$(git rev-parse --show-toplevel)
+if [ -z "$REPO_ROOT" ]; then
+    ERROR_LOG "Non è una directory di repository Git valida. Uscita."
+    exit 1
+fi
+cd "$REPO_ROOT" || { ERROR_LOG "Impossibile cambiare directory in $REPO_ROOT. Uscita."; exit 1; }
+
+# --- Funzione per aspettare che il file sia stabile (soluzione di temporizzazione) ---
+wait_for_stable_file() {
+    local file_to_check="$1"
+    local prev_hash=""
+    local same_count=0
+    local max_wait_time=10 # Tempo massimo di attesa in secondi
+    local elapsed_time=0
+
+    DEBUG_LOG "Inizio attesa stabilità per il file: $file_to_check"
+    while [ "$elapsed_time" -lt "$max_wait_time" ]; do
+        sleep 0.2
+        elapsed_time=$(echo "scale=1; $elapsed_time + 0.2" | bc) # Aggiorna tempo trascorso
+
+        # Controlla se il file esiste prima di calcolare lo shasum
+        if [ ! -f "$file_to_check" ]; then
+            DEBUG_LOG "Il file $file_to_check non esiste ancora, attendo..."
+            prev_hash="" # Reset hash se il file scompare temporaneamente
+            same_count=0
+            continue
+        fi
+
+        local current_hash=$(shasum "$file_to_check" 2>/dev/null | awk '{ print $1 }')
+
+        if [ -z "$current_hash" ]; then # shasum potrebbe fallire se il file è bloccato o vuoto
+            DEBUG_LOG "Impossibile calcolare hash per $file_to_check, attendo..."
+            prev_hash=""
+            same_count=0
+            continue
+        fi
+
+        if [ "$current_hash" = "$prev_hash" ]; then
+            ((same_count++))
+            if [ "$same_count" -ge 2 ]; then # Richiede 2 letture consecutive identiche
+                DEBUG_LOG "File $file_to_check stabile dopo $elapsed_time secondi."
+                return 0 # File stabile
+            fi
+        else
+            same_count=0
+            prev_hash="$current_hash"
+        fi
+        DEBUG_LOG "Attesa stabilità per $file_to_check... $(printf "%.1f" "$elapsed_time")s / ${max_wait_time}s"
+    done
+
+    ERROR_LOG "Errore: Il file $file_to_check non è diventato stabile entro il tempo massimo."
+    return 1 # File non stabile in tempo
+}
+# --------------------------------------------------------------------------------------
+
+
+# Step 1: Clean the staged state of release_notes.json
+# This is crucial to ensure the app writes to a clean file and Git doesn't complain about "staged changes"
+DEBUG_LOG "Eseguo 'git reset HEAD -- \"$FILE_RELEASE_NOTES\"' per pulire lo stato staged del file."
+git reset HEAD -- "$FILE_RELEASE_NOTES" >> "$LOG_FILE" 2>&1
+
+# Get initial timestamp of the file to detect changes
+if command -v stat >/dev/null 2>&1; then
+    # Use %m for modification time on Unix-like systems (Linux, macOS).
+    BEFORE_RN_FILE=$(stat -f %m "$FILE_RELEASE_NOTES" 2>/dev/null || echo "0")
 else
-  echo "Errore: $RELEASE_NOTES_FILE non trovato dopo l’esecuzione dell’app." >&2
-  exit 1
+    # Fallback for systems without stat -f %m or if file doesn't exist yet
+    BEFORE_RN_FILE=$(date +%s) # Current timestamp as a fallback
+fi
+DEBUG_LOG "Timestamp iniziale di $FILE_RELEASE_NOTES: '$BEFORE_RN_FILE'"
+
+# Debug: Show initial git status
+DEBUG_LOG "Stato della working directory e dell'indice (staging area) PRIMA di avviare l'app:"
+git status --porcelain | DEBUG_LOG_STDOUT
+
+INFO_LOG "----------------------------------------------------"
+INFO_LOG "DEBUG INFO: Avvio applicazione GUI per le Release Notes..."
+# Importante: Passa il file del messaggio di commit reale ($COMMIT_MSG_FILE) all'app Fyne.
+# L'app Fyne si aspetta questo come argomento 1 per leggere il messaggio di commit.
+"$APP" "$COMMIT_MSG_FILE" >> "$LOG_FILE" 2>&1
+APP_EXIT_CODE=$?
+INFO_LOG "DEBUG INFO: Applicazione Fyne terminata con Exit Code: $APP_EXIT_CODE"
+
+if [ "$APP_EXIT_CODE" -ne 0 ]; then
+    ERROR_LOG "L'applicazione Release Notes è terminata con un errore (Exit Code: $APP_EXIT_CODE). Commit annullato."
+    exit 1
 fi
 
-# Fine: il file è stato stageato, quindi git commit lo includerà
+# Step 2: Attendi che il file release_notes.json sia stabile dopo la scrittura dell'app
+if [ -f "$FILE_RELEASE_NOTES" ]; then
+    if ! wait_for_stable_file "$FILE_RELEASE_NOTES"; then
+        ERROR_LOG "Il file $FILE_RELEASE_NOTES non è diventato stabile. Commit annullato."
+        exit 1
+    fi
+else
+    ERROR_LOG "Errore: $FILE_RELEASE_NOTES non trovato dopo l'esecuzione dell'app. Commit annullato."
+    exit 1
+fi
+
+# Get final timestamp of the file to detect changes AFTER stabilization
+if command -v stat >/dev/null 2>&1; then
+    AFTER_RN_FILE=$(stat -f %m "$FILE_RELEASE_NOTES" 2>/dev/null || echo "0")
+else
+    AFTER_RN_FILE=$(date +%s)
+fi
+DEBUG_LOG "Timestamp finale di $FILE_RELEASE_NOTES dopo stabilizzazione: '$AFTER_RN_FILE'"
+
+
+# --- Normalizzazione delle terminazioni di riga a LF (rimuovendo CR) ---
+# Questo passaggio è ancora utile per garantire la consistenza dei fine riga nel repository,
+# anche se non era la causa principale dell'errore "unstaged changes".
+if [ -f "$FILE_RELEASE_NOTES" ]; then
+    DEBUG_LOG "Normalizzo le terminazioni di riga di $FILE_RELEASE_NOTES a LF (rimuovendo CR)."
+    # Usa 'sed -i '' ' per la compatibilità con macOS. Per GNU sed (Linux), 'sed -i' è sufficiente.
+    if sed --version 2>/dev/null | grep -q 'GNU sed'; then
+        sed -i 's/\r//g' "$FILE_RELEASE_NOTES" >> "$LOG_FILE" 2>&1
+    else
+        sed -i '' 's/\r//g' "$FILE_RELEASE_NOTES" >> "$LOG_FILE" 2>&1
+    fi
+else
+    DEBUG_LOG "Il file $FILE_RELEASE_NOTES non esiste dopo l'esecuzione dell'app. Non è possibile normalizzare le terminazioni di riga."
+fi
+# --------------------------------------------------------------------------------------
+
+
+# Step 3: Check if the file was modified and proceed to add to index
+# Controllo se il timestamp è cambiato. Se no, non aggiungo.
+if [ "$AFTER_RN_FILE" -gt "$BEFORE_RN_FILE" ]; then
+    DEBUG_LOG "Il file $FILE_RELEASE_NOTES è stato modificato dall'applicazione."
+    DEBUG_LOG "Aggiungo $FILE_RELEASE_NOTES all'indice."
+    
+    # Check current status before adding
+    DEBUG_LOG "Stato dell'indice (staging area) PRIMA di 'git add' finale:"
+    git status --porcelain | DEBUG_LOG_STDOUT
+
+    git add "$FILE_RELEASE_NOTES" >> "$LOG_FILE" 2>&1
+
+    # Final check after adding to ensure no unstaged changes
+    DEBUG_LOG "Controllo finale stato Git dopo add:"
+    git status --porcelain | DEBUG_LOG_STDOUT
+    if git diff --quiet --exit-code --cached "$FILE_RELEASE_NOTES"; then
+        # Questo viene raggiunto solo se il file *NON* è in conflitto dopo l'add.
+        INFO_LOG "✅ Successo: File $FILE_RELEASE_NOTES aggiornato e correttamente aggiunto all'indice."
+    else
+        ERROR_LOG "❌ ERRORE CRITICO: Il file $FILE_RELEASE_NOTES è nell'indice ma ha modifiche non stagionate anche dopo 'git add'."
+        ERROR_LOG "Questo indica un problema persistente con l'indice di Git o una scrittura anomala non risolta dall'attesa."
+        ERROR_LOG "Commit annullato per evitare incoerenze."
+        exit 1
+    fi
+else
+    DEBUG_LOG "Il file $FILE_RELEASE_NOTES non è stato modificato dall'applicazione. Nessuna aggiunta all'indice necessaria."
+fi
+
+# Step 4: Get the last release date from the JSON and append to commit message if needed
+LAST_DATE=$(python3 -c "
+import json
+import sys
+try:
+    with open('$FILE_RELEASE_NOTES') as f:
+        data = json.load(f)
+    if 'releases' in data and len(data['releases']) > 0:
+        last_release = data['releases'][-1]
+        if 'Data' in last_release: # Usa 'Data' come da struttura recente
+            print(last_release['Data'])
+        elif 'date' in last_release: # Fallback per struttura più vecchia
+            print(last_release['date'])
+        else:
+            print('INVALID_DATE') # Nessuna data valida trovata
+    else:
+        print('INVALID_DATE') # Nessuna release trovata
+except (FileNotFoundError, json.JSONDecodeError, IndexError, KeyError) as e:
+    print('INVALID_DATE')
+    sys.stderr.write(f'DEBUG PYTHON ERROR: {e}\\n')
+")
+
+DEBUG_LOG "Data dell'ultima release nel file: '$LAST_DATE'"
+
+# Append release notes to commit message
+if [ "$LAST_DATE" != "INVALID_DATE" ]; then
+    # Add a separator and the release date
+    echo "" >> "$COMMIT_MSG_FILE"
+    echo "---" >> "$COMMIT_MSG_FILE"
+    echo "Release Data: $LAST_DATE" >> "$COMMIT_MSG_FILE"
+fi
+
+INFO_LOG "----------------------------------------------------"
+INFO_LOG "--- Fine esecuzione prepare-commit-msg hook ---"
+INFO_LOG "----------------------------------------------------"
+
 exit 0
