@@ -1,41 +1,45 @@
 
 #!/bin/bash
 
-COMMIT_MSG_FILE="$1"
-COMMIT_SOURCE="$2"
-SHA1="$3"
+# Argomenti: $1 = commit-msg-file, $2 = commit source (es. message), $3 = SHA-1
+MSG_FILE="$1"
+FILE="release_notes.json"
 
-# Evita merge, squash, ecc.
-if [[ "$COMMIT_SOURCE" == "merge" || "$COMMIT_SOURCE" == "squash" || "$COMMIT_SOURCE" == "commit" ]]; then
-  exit 0
-fi
+# Percorso eseguibile dell'app (modifica se necessario)
+APP="./release_notes_app"
 
-RELEASE_NOTES_APP="./release-notes-app"
-RELEASE_NOTES_FILE="release_notes.json"
+# Verifica che il file del commit esista
+[ -f "$MSG_FILE" ] || exit 1
 
-# Verifica se l'app è eseguibile
-if [ ! -x "$RELEASE_NOTES_APP" ]; then
-  echo "Errore: $RELEASE_NOTES_APP non trovato o non eseguibile" >&2
+# Esegui l'app passando il messaggio (o una stringa fittizia se vuoto)
+COMMIT_MSG=$(cat "$MSG_FILE")
+"$APP" --message "$COMMIT_MSG"
+
+# Funzione per aspettare che il file sia stabile
+wait_for_stable_file() {
+  local file="$1"
+  local prev_hash=""
+  local same_count=0
+  while true; do
+    sleep 0.2
+    local hash=$(shasum "$file" 2>/dev/null | awk '{ print $1 }')
+    if [ "$hash" = "$prev_hash" ]; then
+      ((same_count++))
+      if [ "$same_count" -ge 2 ]; then
+        break
+      fi
+    else
+      same_count=0
+      prev_hash="$hash"
+    fi
+  done
+}
+
+# Attendi che il file venga scritto e sia stabile
+if [ -f "$FILE" ]; then
+  wait_for_stable_file "$FILE"
+  git add "$FILE"
+else
+  echo "Errore: $FILE non trovato dopo l'esecuzione dell'app." >&2
   exit 1
 fi
-
-# Avvia l'app, passando il file del messaggio
-"$RELEASE_NOTES_APP" "$COMMIT_MSG_FILE"
-STATUS=$?
-
-if [ $STATUS -ne 0 ]; then
-  echo "Errore: compilazione release notes fallita (codice $STATUS)" >&2
-  exit 1
-fi
-
-# Verifica che il file release_note.json esista ed è stato aggiornato
-if [ ! -f "$RELEASE_NOTES_FILE" ]; then
-  echo "Errore: il file $RELEASE_NOTES_FILE non è stato creato." >&2
-  exit 1
-fi
-
-# Aggiunge release_note.json all'index
-git add "$RELEASE_NOTES_FILE"
-
-# Tutto ok
-exit 0
