@@ -1,33 +1,41 @@
 
 #!/bin/bash
 
-# Parametri passati da git
 COMMIT_MSG_FILE="$1"
 COMMIT_SOURCE="$2"
 SHA1="$3"
 
-# Evita di intervenire su merge, squash, rebase, ecc.
+# Evita merge, squash, ecc.
 if [[ "$COMMIT_SOURCE" == "merge" || "$COMMIT_SOURCE" == "squash" || "$COMMIT_SOURCE" == "commit" ]]; then
   exit 0
 fi
 
-# Percorso assoluto dello script Go (modifica se necessario)
 RELEASE_NOTES_APP="./release-notes-app"
+RELEASE_NOTES_FILE="release_note.json"
 
-# Controlla se l'app esiste
+# Verifica se l'app è eseguibile
 if [ ! -x "$RELEASE_NOTES_APP" ]; then
   echo "Errore: $RELEASE_NOTES_APP non trovato o non eseguibile" >&2
   exit 1
 fi
 
-# Lancia l'app di raccolta note con il file del messaggio come argomento
+# Avvia l'app, passando il file del messaggio
 "$RELEASE_NOTES_APP" "$COMMIT_MSG_FILE"
 STATUS=$?
 
-# Controlla se l'app è terminata con successo
 if [ $STATUS -ne 0 ]; then
   echo "Errore: compilazione release notes fallita (codice $STATUS)" >&2
   exit 1
 fi
 
+# Verifica che il file release_note.json esista ed è stato aggiornato
+if [ ! -f "$RELEASE_NOTES_FILE" ]; then
+  echo "Errore: il file $RELEASE_NOTES_FILE non è stato creato." >&2
+  exit 1
+fi
+
+# Aggiunge release_note.json all'index
+git add "$RELEASE_NOTES_FILE"
+
+# Tutto ok
 exit 0
