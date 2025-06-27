@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Configuration
-APP="./release-notes-app" # Manteniamo la variabile, ma non la useremo in questo test
+APP="./release-notes-app" # Manteniamo la variabile
 FILE_RELEASE_NOTES="release_notes.json"
 COMMIT_MSG_FILE="$1" # The path to the commit message file
 
@@ -23,7 +23,7 @@ ERROR_LOG() { log_message "ERROR" "$1"; echo "❌ ERRORE: $1" >> /dev/stderr; }
 DEBUG_LOG_STDOUT() { while IFS= read -r line; do log_message "STDOUT" "$line"; echo "$line" >> /dev/stderr; done; }
 
 # Clear previous log at the start of execution
-echo "--- Inizio Log prepare-commit-msg (SOLUZIONE FINALE v9.0 - TEST TOUCH): $(date) ---" > "$LOG_FILE"
+echo "--- Inizio Log prepare-commit-msg (SOLUZIONE FINALE v10.1 - TEST UPDATE-INDEX CROSS-PLATFORM): $(date) ---" > "$LOG_FILE"
 echo "----------------------------------------------------" >> "$LOG_FILE"
 echo "--- Inizio esecuzione prepare-commit-msg hook ---" >> "$LOG_FILE"
 echo "----------------------------------------------------" >> "$LOG_FILE"
@@ -46,6 +46,25 @@ if [ -z "$REPO_ROOT" ]; then
 fi
 cd "$REPO_ROOT" || { ERROR_LOG "Impossibile cambiare directory in $REPO_ROOT. Uscita."; exit 1; }
 
+# --- Funzione per ottenere il timestamp di modifica del file cross-platform ---
+get_file_mtime() {
+    local file="$1"
+    if [ ! -f "$file" ]; then
+        echo "0" # File non esiste
+        return
+    fi
+
+    # Try GNU stat (Linux) first
+    if command -v stat >/dev/null 2>&1 && stat --version 2>/dev/null | grep -q "GNU coreutils"; then
+        stat -c %Y "$file" 2>/dev/null
+    # Try BSD stat (macOS)
+    elif command -v stat >/dev/null 2>&1 && stat -f %m "$file" &>/dev/null; then
+        stat -f %m "$file" 2>/dev/null
+    else
+        # Fallback for systems without recognized stat or if stat command fails
+        date +%s # Current timestamp as a fallback
+    fi
+}
 
 # --- Funzione per aspettare che il file sia stabile (soluzione di temporizzazione) ---
 wait_for_stable_file() {
@@ -73,7 +92,6 @@ wait_for_stable_file() {
         fi
 
         local current_hash=$(shasum "$file_to_check" 2>/dev/null | awk '{ print $1 }')
-
         if [ -z "$current_hash" ]; then # shasum potrebbe fallire se il file è bloccato o vuoto
             DEBUG_LOG "Impossibile calcolare hash per $file_to_check, attendo..."
             prev_hash=""
@@ -115,13 +133,7 @@ else
 fi
 
 # Get initial timestamp of the file to detect changes
-if command -v stat >/dev/null 2>&1; then
-    # Use %m for modification time on Unix-like systems (Linux, macOS).
-    BEFORE_RN_FILE=$(stat -f %m "$FILE_RELEASE_NOTES" 2>/dev/null || echo "0")
-else
-    # Fallback for systems without stat -f %m or if file doesn't exist yet
-    BEFORE_RN_FILE=$(date +%s) # Current timestamp as a fallback
-fi
+BEFORE_RN_FILE=$(get_file_mtime "$FILE_RELEASE_NOTES")
 DEBUG_LOG "Timestamp iniziale di $FILE_RELEASE_NOTES: '$BEFORE_RN_FILE'"
 
 # Debug: Show initial git status
@@ -129,16 +141,26 @@ DEBUG_LOG "Stato della working directory e dell'indice (staging area) PRIMA di a
 git status --porcelain | DEBUG_LOG_STDOUT
 
 INFO_LOG "----------------------------------------------------"
-INFO_LOG "DEBUG INFO: Esecuzione di 'touch $FILE_RELEASE_NOTES' invece dell'app Fyne..."
-# Invece di chiamare l'app Fyne, simuliamo una modifica con 'touch'
+INFO_LOG "Esecuzione dell'app Fyne o 'touch' per simulare modifica..."
+# Esegui l'app Fyne O un semplice touch, a seconda di cosa vuoi testare
+# Per testare l'automazione reale, usa l'app Fyne:
+# "$APP" >> "$LOG_FILE" 2>&1
+# APP_EXIT_CODE=$?
+# INFO_LOG "Applicazione Fyne terminata con Exit Code: $APP_EXIT_CODE"
+# if [ "$APP_EXIT_CODE" -ne 0 ]; then
+#     ERROR_LOG "L'applicazione Release Notes è terminata con un errore (Exit Code: $APP_EXIT_CODE). Commit annullato."
+#     exit 1
+# fi
+
+# Per testare il touch come abbiamo fatto finora:
 touch "$FILE_RELEASE_NOTES" >> "$LOG_FILE" 2>&1
 TOUCH_EXIT_CODE=$?
-INFO_LOG "DEBUG INFO: Comando 'touch' terminato con Exit Code: $TOUCH_EXIT_CODE"
-
+INFO_LOG "Comando 'touch' terminato con Exit Code: $TOUCH_EXIT_CODE"
 if [ "$TOUCH_EXIT_CODE" -ne 0 ]; then
     ERROR_LOG "Il comando 'touch' è terminato con un errore (Exit Code: $TOUCH_EXIT_CODE). Commit annullato."
     exit 1
 fi
+
 
 # Step 2: Attendi che il file release_notes.json sia stabile dopo la scrittura/touch
 if [ -f "$FILE_RELEASE_NOTES" ]; then
@@ -147,25 +169,22 @@ if [ -f "$FILE_RELEASE_NOTES" ]; then
         exit 1
     fi
 else
-    ERROR_LOG "Errore: $FILE_RELEASE_NOTES non trovato dopo l'esecuzione del touch. Commit annullato."
+    ERROR_LOG "Errore: $FILE_RELEASE_NOTES non trovato dopo l'esecuzione. Commit annullato."
     exit 1
 fi
 
 # Get final timestamp of the file to detect changes AFTER stabilization
-if command -v stat >/dev/null 2>&1; then
-    AFTER_RN_FILE=$(stat -f %m "$FILE_RELEASE_NOTES" 2>/dev/null || echo "0")
-else
-    AFTER_RN_FILE=$(date +%s)
-fi
+AFTER_RN_FILE=$(get_file_mtime "$FILE_RELEASE_NOTES")
 DEBUG_LOG "Timestamp finale di $FILE_RELEASE_NOTES dopo stabilizzazione: '$AFTER_RN_FILE'"
 
 
-# Step 3: Check if the file was modified and proceed to add to index with --renormalize
+# Step 3: Check if the file was modified and proceed to add to index with --cacheinfo
+# Se il file è stato modificato (o non era nell'indice e ora esiste), prova ad aggiungerlo
 if [ "$AFTER_RN_FILE" -gt "$BEFORE_RN_FILE" ] || ! git ls-files --error-unmatch "$FILE_RELEASE_NOTES" &>/dev/null; then
-    DEBUG_LOG "Il file $FILE_RELEASE_NOTES è stato modificato (o non era nell'indice). Lo aggiungo con --renormalize."
+    DEBUG_LOG "Il file $FILE_RELEASE_NOTES è stato modificato (o non era nell'indice). Proverò ad aggiungerlo con git update-index --add --cacheinfo."
     
     # Diagnostic: Check current status before adding
-    DEBUG_LOG "Stato dell'indice (staging area) PRIMA di 'git add --renormalize' finale (diagnostica):"
+    DEBUG_LOG "Stato dell'indice (staging area) PRIMA di 'git update-index' finale (diagnostica):"
     git status --porcelain | DEBUG_LOG_STDOUT
     DEBUG_LOG "DEBUG: git status --porcelain --ignored (diagnostica estesa):"
     git status --porcelain --ignored | DEBUG_LOG_STDOUT
@@ -174,31 +193,51 @@ if [ "$AFTER_RN_FILE" -gt "$BEFORE_RN_FILE" ] || ! git ls-files --error-unmatch 
     DEBUG_LOG "DEBUG: git ls-files -s (diagnostica: contenuto indice con mode e hash):"
     git ls-files -s | DEBUG_LOG_STDOUT
 
-    git add --renormalize "$FILE_RELEASE_NOTES" >> "$LOG_FILE" 2>&1
-    ADD_EXIT_CODE=$? # Cattura il codice di uscita di git add
+    # Ottieni la modalità del file (es. 100644 per file normale, 100755 per eseguibile)
+    # Assumiamo 100644 per file normale. git ls-files -s darebbe la modalità corrente se tracciato.
+    # Per i file non tracciati, possiamo usare `stat` per ottenere la modalità di sistema.
+    # Se stat non supporta il formato, assumiamo 100644 (file regolare, non eseguibile)
+    FILE_MODE=$(stat -c %a "$FILE_RELEASE_NOTES" 2>/dev/null || echo "644") # Ottiene i permessi octal, es. 644
+    FILE_MODE="100$FILE_MODE" # Prepend 100 per tipo file regolare (Git object mode)
+    DEBUG_LOG "DEBUG: Modalità calcolata per $FILE_RELEASE_NOTES: $FILE_MODE"
 
-    if [ "$ADD_EXIT_CODE" -ne 0 ]; then
-        ERROR_LOG "❌ ERRORE CRITICO: 'git add --renormalize $FILE_RELEASE_NOTES' è fallito con codice di uscita $ADD_EXIT_CODE."
+
+    # Calcola l'hash SHA-1 del contenuto del file nel working directory
+    FILE_HASH=$(git hash-object -w "$FILE_RELEASE_NOTES" >> "$LOG_FILE" 2>&1)
+    if [ $? -ne 0 ]; then
+        ERROR_LOG "❌ ERRORE CRITICO: Fallimento nel calcolare l'hash del file $FILE_RELEASE_NOTES. Commit annullato."
+        exit 1
+    fi
+    DEBUG_LOG "DEBUG: Hash calcolato per $FILE_RELEASE_NOTES: $FILE_HASH"
+
+    # Tenta di aggiungere il file all'indice usando git update-index --add --cacheinfo
+    # Usiamo --add solo se il file non è già tracciato.
+    # Se il file esiste già nell'indice, potremmo usare --cacheinfo da solo per aggiornarlo
+    # Ma il nostro flusso prevede un git rm --cached iniziale, quindi --add dovrebbe essere sicuro.
+    git update-index --add --cacheinfo "$FILE_MODE","$FILE_HASH","$FILE_RELEASE_NOTES" >> "$LOG_FILE" 2>&1
+    UPDATE_INDEX_EXIT_CODE=$?
+
+    if [ "$UPDATE_INDEX_EXIT_CODE" -ne 0 ]; then
+        ERROR_LOG "❌ ERRORE CRITICO: 'git update-index --add --cacheinfo' è fallito con codice di uscita $UPDATE_INDEX_EXIT_CODE."
         ERROR_LOG "Questo impedisce di aggiungere il file all'indice. Commit annullato."
         exit 1
     fi
 
-    # Verify if the file is now truly in the index after the add command
+    # Verify if the file is now truly in the index after the update-index command
     if ! git ls-files --error-unmatch "$FILE_RELEASE_NOTES" &>/dev/null; then
-        ERROR_LOG "❌ ERRORE CRITICO: Nonostante 'git add --renormalize' abbia terminato senza errori ($ADD_EXIT_CODE), il file $FILE_RELEASE_NOTES non è stato trovato nell'indice di Git."
+        ERROR_LOG "❌ ERRORE CRITICO: Nonostante 'git update-index --add --cacheinfo' abbia terminato senza errori ($UPDATE_INDEX_EXIT_CODE), il file $FILE_RELEASE_NOTES non è stato trovato nell'indice di Git."
         ERROR_LOG "Questo indica un problema profondo con l'interazione tra Git e il file system. Commit annullato."
         exit 1
     fi
 
     # Final check after adding to ensure no unstaged changes (this is the original check)
-    DEBUG_LOG "Controllo finale stato Git dopo add (diagnostica):"
+    DEBUG_LOG "Controllo finale stato Git dopo update-index (diagnostica):"
     git status --porcelain | DEBUG_LOG_STDOUT
     if git diff --quiet --exit-code --cached "$FILE_RELEASE_NOTES"; then
-        # Questo viene raggiunto solo se il file *NON* è in conflitto dopo l'add.
         INFO_LOG "✅ Successo: File $FILE_RELEASE_NOTES aggiornato e correttamente aggiunto all'indice."
     else
-        ERROR_LOG "❌ ERRORE CRITICO: Il file $FILE_RELEASE_NOTES è nell'indice ma ha modifiche non stagionate anche dopo 'git add --renormalize'."
-        ERROR_LOG "Questo indica un problema persistente con l'indice di Git o una scrittura anomala non risolta dall'attesa e dalla re-normalizzazione di Git."
+        ERROR_LOG "❌ ERRORE CRITICO: Il file $FILE_RELEASE_NOTES è nell'indice ma ha modifiche non stagionate anche dopo 'git update-index'."
+        ERROR_LOG "Questo indica un problema persistente con l'indice di Git o una scrittura anomala."
         ERROR_LOG "Commit annullato per evitare incoerenze."
         exit 1
     fi
