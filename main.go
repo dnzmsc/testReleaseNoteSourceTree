@@ -97,6 +97,7 @@ func getGitData(commitMsgFilePath string) (author, description, date, commitHash
 		author = strings.TrimSpace(string(outAuthor))
 	}
 
+	// Legge il contenuto del file del messaggio di commit, che può contenere commenti di Git
 	commitMsgContent, err := os.ReadFile(commitMsgFilePath)
 	if err != nil {
 		return "", "", "", "", fmt.Errorf("errore nella lettura del file del messaggio di commit (%s): %w", commitMsgFilePath, err)
@@ -105,10 +106,12 @@ func getGitData(commitMsgFilePath string) (author, description, date, commitHash
 	var cleanedDescription []string
 	for _, line := range lines {
 		trimmedLine := strings.TrimSpace(line)
+		// Ignora le righe che iniziano con # (commenti di Git)
 		if !strings.HasPrefix(trimmedLine, "#") && trimmedLine != "" {
 			cleanedDescription = append(cleanedDescription, line)
 		}
 	}
+	// La descrizione del commit sarà il testo "pulito" dal file del messaggio di commit
 	description = strings.TrimSpace(strings.Join(cleanedDescription, "\n"))
 
 	// Recupera la data e ora del commit attuale nel formato ISO 8601 esteso
@@ -147,7 +150,7 @@ func main() {
 		dialog.ShowError(fmt.Errorf("Questa applicazione deve essere eseguita come un hook 'prepare-commit-msg' e necessita del percorso del file del messaggio di commit come argomento."), w)
 		return
 	}
-	commitMsgFilePath := os.Args[1]
+	commitMsgFilePath := os.Args[1] // Il primo argomento è il percorso al file del messaggio di commit
 
 	modules, err := loadModules("modules.json")
 	if err != nil {
@@ -156,6 +159,7 @@ func main() {
 	}
 
 	// 1. Recupero dati Git
+	// commitDesc qui conterrà il messaggio di commit letto da COMMIT_EDITMSG
 	commitAuthor, commitDesc, commitDateRaw, commitHash, err := getGitData(commitMsgFilePath)
 	if err != nil {
 		dialog.ShowError(fmt.Errorf("Impossibile recuperare i dati del commit attuale. Assicurati di eseguire l'applicazione in un repository Git valido. Errore: %v", err), w)
@@ -193,6 +197,7 @@ func main() {
 	// 3. Dichiarazione delle Label per i dettagli del commit
 	commitAuthorLabel := widget.NewLabel(fmt.Sprintf("Autore Commit: %s", commitAuthor))
 	commitHashLabel := widget.NewLabel(fmt.Sprintf("Hash Commit: %s", commitHash))
+	// CORREZIONE QUI: Usa commitDesc direttamente
 	commitDescLabel := widget.NewLabel(fmt.Sprintf("Messaggio Commit: %s", commitDesc))
 
 	var commitDateLabel *widget.Label
@@ -296,7 +301,7 @@ func main() {
 			ExcludedFromReleaseNote: isExcluded,
 		}
 
-		filePath := "release_notes.json"
+		filePath := "release_notes.json" // Il file dove verranno salvate le note di release
 		var relFile ReleaseFile
 
 		if content, err := os.ReadFile(filePath); err == nil {
