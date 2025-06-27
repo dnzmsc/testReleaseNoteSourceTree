@@ -1,0 +1,171 @@
+#!/bin/bash
+
+# Configuration
+APP="./release-notes-app"
+FILE_RELEASE_NOTES="release_notes.json"
+COMMIT_MSG_FILE="$1" # The path to the commit message file
+
+# --- Logging Functions ---
+LOG_FILE=".git-hooks/prepare-commit-msg.log"
+
+# Function to log messages with timestamp and script name
+log_message() {
+    local type="$1" # e.g., INFO, DEBUG, ERROR
+    local message="$2"
+    echo "$(date '+%Y-%m-%d %H:%M:%S') [$type] $message" >> "$LOG_FILE"
+}
+
+# Functions for different log levels
+DEBUG_LOG() { log_message "DEBUG" "$1"; echo "DEBUG INFO: $1" >> /dev/stderr; }
+INFO_LOG() { log_message "INFO" "$1"; echo "INFO: $1" >> /dev/stderr; }
+ERROR_LOG() { log_message "ERROR" "$1"; echo "❌ ERRORE: $1" >> /dev/stderr; }
+# Function to log output of commands directly to stderr and file
+DEBUG_LOG_STDOUT() { while IFS= read -r line; do log_message "STDOUT" "$line"; echo "$line" >> /dev/stderr; done; }
+
+# Clear previous log at the start of execution
+echo "--- Inizio Log prepare-commit-msg (SOLUZIONE FINALE 2.0): $(date) ---" > "$LOG_FILE"
+echo "----------------------------------------------------" >> "$LOG_FILE"
+echo "--- Inizio esecuzione prepare-commit-msg hook ---" >> "$LOG_FILE"
+echo "----------------------------------------------------" >> "$LOG_FILE"
+
+# Export a variable to signal the Go app it's being run from a Git hook
+export GIT_INSIDE_HOOK_COMMIT=true
+
+INFO_LOG "----------------------------------------------------"
+INFO_LOG "--- Inizio esecuzione prepare-commit-msg hook ---"
+INFO_LOG "----------------------------------------------------"
+
+DEBUG_LOG "Percorso del file messaggio di commit: $COMMIT_MSG_FILE"
+DEBUG_LOG "Percorso dell'applicazione Fyne: $APP"
+DEBUG_LOG "Percorso del file Release Notes JSON: $FILE_RELEASE_NOTES"
+
+# Ensure the hook is run from the root of the repository
+REPO_ROOT=$(git rev-parse --show-toplevel)
+if [ -z "$REPO_ROOT" ]; then
+    ERROR_LOG "Non è una directory di repository Git valida. Uscita."
+    exit 1
+fi
+cd "$REPO_ROOT" || { ERROR_LOG "Impossibile cambiare directory in $REPO_ROOT. Uscita."; exit 1; }
+
+# Step 1: Clean the staged state of release_notes.json
+# This is crucial to ensure the app writes to a clean file and Git doesn't complain about "staged changes"
+DEBUG_LOG "Eseguo 'git reset HEAD -- \"$FILE_RELEASE_NOTES\"' per pulire lo stato staged del file."
+git reset HEAD -- "$FILE_RELEASE_NOTES" >> "$LOG_FILE" 2>&1
+
+# Get initial timestamp of the file to detect changes
+# Use %m for modification time on Unix-like systems (Linux, macOS). For Windows, might need alternative or stat -c %Y
+if command -v stat >/dev/null 2>&1; then
+    BEFORE_RN_FILE=$(stat -f %m "$FILE_RELEASE_NOTES" 2>/dev/null || echo "0")
+else
+    # Fallback for systems without stat -f %m or if file doesn't exist yet
+    BEFORE_RN_FILE=$(date +%s) # Current timestamp as a fallback
+fi
+DEBUG_LOG "Timestamp iniziale di $FILE_RELEASE_NOTES: '$BEFORE_RN_FILE'"
+
+
+# Debug: Show initial git status
+DEBUG_LOG "Stato della working directory e dell'indice (staging area) PRIMA di avviare l'app:"
+git status --porcelain | DEBUG_LOG_STDOUT
+
+INFO_LOG "----------------------------------------------------"
+INFO_LOG "DEBUG INFO: Avvio applicazione GUI per le Release Notes..."
+# CORREZIONE CRITICA: Passa il file del messaggio di commit reale ($COMMIT_MSG_FILE) all'app Fyne.
+# L'app Fyne si aspetta questo come argomento 1 per leggere il messaggio di commit.
+"$APP" "$COMMIT_MSG_FILE" >> "$LOG_FILE" 2>&1
+APP_EXIT_CODE=$?
+INFO_LOG "DEBUG INFO: Applicazione Fyne terminata con Exit Code: $APP_EXIT_CODE"
+
+if [ "$APP_EXIT_CODE" -ne 0 ]; then
+    ERROR_LOG "L'applicazione Release Notes è terminata con un errore (Exit Code: $APP_EXIT_CODE). Commit annullato."
+    exit 1
+fi
+
+# Get final timestamp of the file to detect changes
+if command -v stat >/dev/null 2>&1; then
+    AFTER_RN_FILE=$(stat -f %m "$FILE_RELEASE_NOTES" 2>/dev/null || echo "0")
+else
+    AFTER_RN_FILE=$(date +%s)
+fi
+DEBUG_LOG "Timestamp finale di $FILE_RELEASE_NOTES: '$AFTER_RN_FILE'"
+
+# --- NEW STEP: Normalize line endings to LF after the Fyne app has written to the file ---
+# This is crucial if the Fyne app (Go's JSON writing) writes CRLF on Windows systems,
+# while .gitattributes expects LF.
+if [ -f "$FILE_RELEASE_NOTES" ]; then
+    DEBUG_LOG "Normalizzo le terminazioni di riga di $FILE_RELEASE_NOTES a LF (rimuovendo CR)."
+    # Using 'sed -i '' ' for macOS compatibility. For GNU sed (Linux), 'sed -i' is enough.
+    # The '' after -i is for macOS sed, which requires a backup extension (empty string means no backup file).
+    if sed --version 2>/dev/null | grep -q 'GNU sed'; then
+        sed -i 's/\r//g' "$FILE_RELEASE_NOTES" >> "$LOG_FILE" 2>&1
+    else
+        sed -i '' 's/\r//g' "$FILE_RELEASE_NOTES" >> "$LOG_FILE" 2>&1
+    fi
+else
+    DEBUG_LOG "Il file $FILE_RELEASE_NOTES non esiste dopo l'esecuzione dell'app. Non è possibile normalizzare le terminazioni di riga."
+fi
+# --------------------------------------------------------------------------------------
+
+# Check if the file was modified and proceed to add to index
+# Check if file modification time actually changed. If not, don't add.
+if [ "$AFTER_RN_FILE" -gt "$BEFORE_RN_FILE" ]; then
+    DEBUG_LOG "Aggiungo $FILE_RELEASE_NOTES all'indice."
+    # Check current status before adding
+    DEBUG_LOG "Stato dell'indice (staging area) PRIMA di 'git add' finale:"
+    git status --porcelain | DEBUG_LOG_STDOUT
+
+    git add "$FILE_RELEASE_NOTES" >> "$LOG_FILE" 2>&1
+
+    # Final check after adding to ensure no unstaged changes
+    DEBUG_LOG "Controllo finale stato Git dopo add:"
+    git status --porcelain | DEBUG_LOG_STDOUT
+    if git diff --quiet --exit-code --cached "$FILE_RELEASE_NOTES"; then
+        # This part will only be reached if the file IS NOT in conflict after add.
+        INFO_LOG "✅ Successo: File $FILE_RELEASE_NOTES aggiornato e correttamente aggiunto all'indice."
+    else
+        ERROR_LOG "❌ ERRORE CRITICO: Il file $FILE_RELEASE_NOTES è nell'indice ma ha modifiche non stagionate anche dopo 'git add'."
+        ERROR_LOG "Questo indica un problema persistente con la gestione dei fine riga o l'indice di Git."
+        ERROR_LOG "Commit annullato per evitare incoerenze."
+        exit 1
+    fi
+else
+    DEBUG_LOG "Il file $FILE_RELEASE_NOTES non è stato modificato dall'applicazione. Nessuna aggiunta all'indice necessaria."
+fi
+
+# Get the last release date from the JSON and append to commit message if needed
+LAST_DATE=$(python3 -c "
+import json
+import sys
+try:
+    with open('$FILE_RELEASE_NOTES') as f:
+        data = json.load(f)
+    if 'releases' in data and len(data['releases']) > 0:
+        # Check if 'data' key exists in the last release, otherwise use 'date'
+        last_release = data['releases'][-1]
+        if 'Data' in last_release: # Use 'Data' as per recent structure
+            print(last_release['Data'])
+        elif 'date' in last_release: # Fallback for older structure
+            print(last_release['date'])
+        else:
+            print('INVALID_DATE')
+    else:
+        print('INVALID_DATE')
+except (FileNotFoundError, json.JSONDecodeError, IndexError, KeyError) as e:
+    print('INVALID_DATE')
+    sys.stderr.write(f'DEBUG PYTHON ERROR: {e}\\n')
+")
+
+DEBUG_LOG "Data dell'ultima release nel file: '$LAST_DATE'"
+
+# Append release notes to commit message
+if [ "$LAST_DATE" != "INVALID_DATE" ]; then
+    # Add a separator and the release date
+    echo "" >> "$COMMIT_MSG_FILE"
+    echo "---" >> "$COMMIT_MSG_FILE"
+    echo "Release Data: $LAST_DATE" >> "$COMMIT_MSG_FILE"
+fi
+
+INFO_LOG "----------------------------------------------------"
+INFO_LOG "--- Fine esecuzione prepare-commit-msg hook ---"
+INFO_LOG "----------------------------------------------------"
+
+exit 0

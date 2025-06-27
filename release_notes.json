@@ -186,6 +186,17 @@
       "commitDate": "2025-06-27 10:34:08 +0200",
       "commitHash": "9435427a081c6bc67428313e63847eb7b95044c2",
       "excludedFromReleaseNote": true
+    },
+    {
+      "data": "27/06/2025 10:50:58",
+      "tipo": "Generico",
+      "modulo": "",
+      "descrizione": "bb",
+      "commitAuthor": "cammoranesi",
+      "commitDesc": "Capitano",
+      "commitDate": "2025-06-27 10:50:13 +0200",
+      "commitHash": "4f898af63848da34eed14bfbb372a852c1df0ca2",
+      "excludedFromReleaseNote": true
     }
   ]
 }
