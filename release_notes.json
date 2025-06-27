@@ -87,6 +87,17 @@
       "commitDate": "2025-06-27 12:25:31 +0200",
       "commitHash": "2a3e79a5b4cceff69fed4688bfe1f3cb4c327ff9",
       "excludedFromReleaseNote": true
+    },
+    {
+      "data": "27/06/2025 12:30:46",
+      "tipo": "Generico",
+      "modulo": "",
+      "descrizione": "santini",
+      "commitAuthor": "cammoranesi",
+      "commitDesc": "santini",
+      "commitDate": "2025-06-27 12:29:18 +0200",
+      "commitHash": "7efb82e4f2c40a7185dfb7149bd6e71dfd2426ff",
+      "excludedFromReleaseNote": true
     }
   ]
 }
