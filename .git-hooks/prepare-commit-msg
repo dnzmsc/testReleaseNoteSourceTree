@@ -5,7 +5,7 @@ COMMIT_MSG_FILE="$1"
 COMMIT_SOURCE="$2"
 SHA1="$3"
 
-# Esci subito per commit automatici (merge, squash, ecc.)
+# Evita merge, squash, ecc.
 if [[ "$COMMIT_SOURCE" == "merge" || "$COMMIT_SOURCE" == "squash" || "$COMMIT_SOURCE" == "commit" ]]; then
   exit 0
 fi
@@ -19,7 +19,7 @@ if [ ! -x "$RELEASE_NOTES_APP" ]; then
   exit 1
 fi
 
-# Lancia l'app, passando il file del messaggio
+# Avvia l'app GUI passando il file del messaggio di commit
 "$RELEASE_NOTES_APP" "$COMMIT_MSG_FILE"
 STATUS=$?
 
@@ -28,33 +28,43 @@ if [ $STATUS -ne 0 ]; then
   exit 1
 fi
 
-# Verifica che il file esista
-if [ ! -f "$RELEASE_NOTES_FILE" ]; then
-  echo "Errore: il file $RELEASE_NOTES_FILE non è stato creato." >&2
-  exit 1
-fi
-
-# Funzione per attendere che il file sia stabile
+# Funzione per aspettare che il file sia stabile
 wait_for_stable_file() {
   local file="$1"
   local prev_hash=""
   local same_count=0
+  local max_attempts=50
+  local attempt=0
 
-  while true; do
-    sleep 0.2
+  while [ $attempt -lt $max_attempts ]; do
+    if [ ! -f "$file" ]; then
+      sleep 0.1
+      ((attempt++))
+      continue
+    fi
+
     local hash=$(shasum "$file" 2>/dev/null | awk '{ print $1 }')
+
     if [ "$hash" = "$prev_hash" ]; then
       ((same_count++))
       if [ "$same_count" -ge 2 ]; then
-        break
+        return 0
       fi
     else
       same_count=0
       prev_hash="$hash"
     fi
+
+    sleep 0.2
+    ((attempt++))
   done
+
+  echo "Errore: timeout nell'attesa del file stabile: $file" >&2
+  return 1
 }
 
-# Aspetta la stabilizzazione e aggiungi il file
-wait_for_stable_file "$RELEASE_NOTES_FILE"
+# Attendi che il file sia stato scritto e sia stabile
+wait_for_stable_file "$RELEASE_NOTES_FILE" || exit 1
+
+# Aggiungi il file release_notes.json al commit
 git add "$RELEASE_NOTES_FILE"
