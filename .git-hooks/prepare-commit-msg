@@ -23,7 +23,7 @@ ERROR_LOG() { log_message "ERROR" "$1"; echo "❌ ERRORE: $1" >> /dev/stderr; }
 DEBUG_LOG_STDOUT() { while IFS= read -r line; do log_message "STDOUT" "$line"; echo "$line" >> /dev/stderr; done; }
 
 # Clear previous log at the start of execution
-echo "--- Inizio Log prepare-commit-msg (SOLUZIONE FINALE v4.0): $(date) ---" > "$LOG_FILE"
+echo "--- Inizio Log prepare-commit-msg (SOLUZIONE FINALE v5.0): $(date) ---" > "$LOG_FILE"
 echo "----------------------------------------------------" >> "$LOG_FILE"
 echo "--- Inizio esecuzione prepare-commit-msg hook ---" >> "$LOG_FILE"
 echo "----------------------------------------------------" >> "$LOG_FILE"
@@ -46,6 +46,7 @@ if [ -z "$REPO_ROOT" ]; then
     exit 1
 fi
 cd "$REPO_ROOT" || { ERROR_LOG "Impossibile cambiare directory in $REPO_ROOT. Uscita."; exit 1; }
+
 
 # --- Funzione per aspettare che il file sia stabile (soluzione di temporizzazione) ---
 wait_for_stable_file() {
@@ -100,10 +101,19 @@ wait_for_stable_file() {
 # --------------------------------------------------------------------------------------
 
 
-# Step 1: Clean the staged state of release_notes.json
-# This is crucial to ensure the app writes to a clean file and Git doesn't complain about "staged changes"
-DEBUG_LOG "Eseguo 'git reset HEAD -- \"$FILE_RELEASE_NOTES\"' per pulire lo stato staged del file."
-git reset HEAD -- "$FILE_RELEASE_NOTES" >> "$LOG_FILE" 2>&1
+# Step 1: Clean the Git index for release_notes.json
+# This is crucial to ensure Git re-evaluates the file from scratch with EOL rules.
+if git ls-files --error-unmatch "$FILE_RELEASE_NOTES" &>/dev/null; then
+    DEBUG_LOG "Rimuovo $FILE_RELEASE_NOTES dall'indice (cache) per forzare una re-normalizzazione completa."
+    git rm --cached "$FILE_RELEASE_NOTES" >> "$LOG_FILE" 2>&1
+    # Check if removal was successful, if it was in index.
+    if [ $? -ne 0 ]; then
+        ERROR_LOG "Errore durante la rimozione di $FILE_RELEASE_NOTES dalla cache. Commit annullato."
+        exit 1
+    fi
+else
+    DEBUG_LOG "$FILE_RELEASE_NOTES non era nell'indice, nessuna rimozione dalla cache necessaria."
+fi
 
 # Get initial timestamp of the file to detect changes
 if command -v stat >/dev/null 2>&1; then
@@ -153,8 +163,7 @@ DEBUG_LOG "Timestamp finale di $FILE_RELEASE_NOTES dopo stabilizzazione: '$AFTER
 
 
 # --- Normalizzazione delle terminazioni di riga a LF (rimuovendo CR) ---
-# Questo passaggio è ancora utile per garantire la consistenza dei fine riga nel repository,
-# anche se non era la causa principale dell'errore "unstaged changes".
+# Questo passaggio è ancora utile per garantire la consistenza dei fine riga nel repository.
 if [ -f "$FILE_RELEASE_NOTES" ]; then
     DEBUG_LOG "Normalizzo le terminazioni di riga di $FILE_RELEASE_NOTES a LF (rimuovendo CR)."
     # Usa 'sed -i '' ' per la compatibilità con macOS. Per GNU sed (Linux), 'sed -i' è sufficiente.
@@ -171,9 +180,10 @@ fi
 
 # Step 3: Check if the file was modified and proceed to add to index
 # Controllo se il timestamp è cambiato. Se no, non aggiungo.
-if [ "$AFTER_RN_FILE" -gt "$BEFORE_RN_FILE" ]; then
-    DEBUG_LOG "Il file $FILE_RELEASE_NOTES è stato modificato dall'applicazione."
-    DEBUG_LOG "Aggiungo $FILE_RELEASE_NOTES all'indice."
+# La logica del timestamp serve anche a catturare eventuali modifiche da parte dell'app
+# nel caso in cui il file non fosse inizialmente nell'indice e fosse stato aggiunto ex-novo.
+if [ "$AFTER_RN_FILE" -gt "$BEFORE_RN_FILE" ] || ! git ls-files --error-unmatch "$FILE_RELEASE_NOTES" &>/dev/null; then
+    DEBUG_LOG "Il file $FILE_RELEASE_NOTES è stato modificato dall'applicazione o non era nell'indice. Lo aggiungo."
     
     # Check current status before adding
     DEBUG_LOG "Stato dell'indice (staging area) PRIMA di 'git add' finale:"
@@ -189,7 +199,7 @@ if [ "$AFTER_RN_FILE" -gt "$BEFORE_RN_FILE" ]; then
         INFO_LOG "✅ Successo: File $FILE_RELEASE_NOTES aggiornato e correttamente aggiunto all'indice."
     else
         ERROR_LOG "❌ ERRORE CRITICO: Il file $FILE_RELEASE_NOTES è nell'indice ma ha modifiche non stagionate anche dopo 'git add'."
-        ERROR_LOG "Questo indica un problema persistente con l'indice di Git o una scrittura anomala non risolta dall'attesa."
+        ERROR_LOG "Questo indica un problema persistente con l'indice di Git o una scrittura anomala non risolta dall'attesa e dalla re-normalizzazione."
         ERROR_LOG "Commit annullato per evitare incoerenze."
         exit 1
     fi
