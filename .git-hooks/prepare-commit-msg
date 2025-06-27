@@ -6,7 +6,7 @@ MSG_FILE="$1"
 FILE="release_notes.json"
 
 # Percorso eseguibile dell'app (modifica se necessario)
-APP="./release_notes_app"
+APP="./release-notes-app"
 
 # Verifica che il file del commit esista
 [ -f "$MSG_FILE" ] || exit 1
