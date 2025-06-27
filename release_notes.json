@@ -230,6 +230,17 @@
       "commitDate": "2025-06-27 11:14:20 +0200",
       "commitHash": "c0ec8c0336276084899466788e8f8f712f5d57fe",
       "excludedFromReleaseNote": true
+    },
+    {
+      "data": "27/06/2025 11:19:45",
+      "tipo": "Generico",
+      "modulo": "",
+      "descrizione": "a",
+      "commitAuthor": "cammoranesi",
+      "commitDesc": "Riparto hook",
+      "commitDate": "2025-06-27 11:17:35 +0200",
+      "commitHash": "fd58eef34bb3d8fd796cd1fbd2015200e56a82a8",
+      "excludedFromReleaseNote": true
     }
   ]
 }
