@@ -131,6 +131,17 @@
       "commitDate": "2025-06-27 12:34:00 +0200",
       "commitHash": "4470d86e72d2632796475d5ae56f70e75987371e",
       "excludedFromReleaseNote": true
+    },
+    {
+      "data": "27/06/2025 12:41:08",
+      "tipo": "Generico",
+      "modulo": "",
+      "descrizione": "santini e colombo nemici",
+      "commitAuthor": "cammoranesi",
+      "commitDesc": "santini e colombo grandi nemici",
+      "commitDate": "2025-06-27 12:39:40 +0200",
+      "commitHash": "75dc77b40c8ae804baedaafcece948cf7007f14f",
+      "excludedFromReleaseNote": true
     }
   ]
 }
