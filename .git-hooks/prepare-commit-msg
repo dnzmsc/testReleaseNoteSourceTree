@@ -5,7 +5,7 @@ COMMIT_MSG_FILE="$1"
 COMMIT_SOURCE="$2"
 SHA1="$3"
 
-# Evita merge, squash, ecc.
+# Esci subito per commit automatici (merge, squash, ecc.)
 if [[ "$COMMIT_SOURCE" == "merge" || "$COMMIT_SOURCE" == "squash" || "$COMMIT_SOURCE" == "commit" ]]; then
   exit 0
 fi
@@ -19,7 +19,7 @@ if [ ! -x "$RELEASE_NOTES_APP" ]; then
   exit 1
 fi
 
-# Avvia l'app, passando il file del messaggio
+# Lancia l'app, passando il file del messaggio
 "$RELEASE_NOTES_APP" "$COMMIT_MSG_FILE"
 STATUS=$?
 
@@ -28,17 +28,18 @@ if [ $STATUS -ne 0 ]; then
   exit 1
 fi
 
-# Verifica che il file release_note.json esista ed è stato aggiornato
+# Verifica che il file esista
 if [ ! -f "$RELEASE_NOTES_FILE" ]; then
   echo "Errore: il file $RELEASE_NOTES_FILE non è stato creato." >&2
   exit 1
 fi
 
-# Funzione per aspettare che il file sia stabile
+# Funzione per attendere che il file sia stabile
 wait_for_stable_file() {
   local file="$1"
   local prev_hash=""
   local same_count=0
+
   while true; do
     sleep 0.2
     local hash=$(shasum "$file" 2>/dev/null | awk '{ print $1 }')
@@ -54,11 +55,6 @@ wait_for_stable_file() {
   done
 }
 
-# Attendi che il file venga scritto e sia stabile
-if [ -f "$FILE" ]; then
-  wait_for_stable_file "$FILE"
-  git add "$FILE"
-else
-  echo "Errore: $FILE non trovato dopo l'esecuzione dell'app." >&2
-  exit 1
-fi
+# Aspetta la stabilizzazione e aggiungi il file
+wait_for_stable_file "$RELEASE_NOTES_FILE"
+git add "$RELEASE_NOTES_FILE"
