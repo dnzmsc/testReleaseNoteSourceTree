@@ -109,6 +109,17 @@
       "commitDate": "2025-06-27 12:31:55 +0200",
       "commitHash": "e58d90b94eedb3e39611d19104dc28e506a0f738",
       "excludedFromReleaseNote": true
+    },
+    {
+      "data": "27/06/2025 12:34:05",
+      "tipo": "Generico",
+      "modulo": "",
+      "descrizione": "santini e colombo",
+      "commitAuthor": "cammoranesi",
+      "commitDesc": "santini e colombo",
+      "commitDate": "2025-06-27 12:32:44 +0200",
+      "commitHash": "86444bb8f2e48b57a4133ff87fa95fcb5048b64d",
+      "excludedFromReleaseNote": true
     }
   ]
 }

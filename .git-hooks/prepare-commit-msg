@@ -3,23 +3,22 @@
 
 COMMIT_MSG_FILE="$1"
 COMMIT_SOURCE="$2"
-SHA1="$3"
+
+RELEASE_NOTES_APP="./release-notes-app"
+RELEASE_NOTES_FILE="release_notes.json"
 
 # Evita merge, squash, ecc.
 if [[ "$COMMIT_SOURCE" == "merge" || "$COMMIT_SOURCE" == "squash" || "$COMMIT_SOURCE" == "commit" ]]; then
   exit 0
 fi
 
-RELEASE_NOTES_APP="./release-notes-app"
-RELEASE_NOTES_FILE="release_notes.json"
-
-# Verifica che l'app sia eseguibile
+# Verifica se l'app è eseguibile
 if [ ! -x "$RELEASE_NOTES_APP" ]; then
   echo "Errore: $RELEASE_NOTES_APP non trovato o non eseguibile" >&2
   exit 1
 fi
 
-# Avvia l'app GUI passando il messaggio
+# Avvia l’app per compilare le note di rilascio
 "$RELEASE_NOTES_APP" "$COMMIT_MSG_FILE"
 STATUS=$?
 
@@ -28,7 +27,7 @@ if [ $STATUS -ne 0 ]; then
   exit 1
 fi
 
-# Funzione per aspettare che un file sia "stabile"
+# Funzione per attendere che il file sia stabile
 wait_for_stable_file() {
   local file="$1"
   local prev_hash=""
@@ -48,11 +47,14 @@ wait_for_stable_file() {
   done
 }
 
-# Aspetta che il file esista e sia stabile
+# Attende e stagea il file
 if [ -f "$RELEASE_NOTES_FILE" ]; then
   wait_for_stable_file "$RELEASE_NOTES_FILE"
   git add "$RELEASE_NOTES_FILE"
 else
-  echo "Errore: $RELEASE_NOTES_FILE non trovato dopo l'esecuzione dell'app." >&2
+  echo "Errore: $RELEASE_NOTES_FILE non trovato dopo l’esecuzione dell’app." >&2
   exit 1
 fi
+
+# Fine: il file è stato stageato, quindi git commit lo includerà
+exit 0
