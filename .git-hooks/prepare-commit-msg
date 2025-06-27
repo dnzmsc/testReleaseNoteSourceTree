@@ -23,7 +23,7 @@ ERROR_LOG() { log_message "ERROR" "$1"; echo "❌ ERRORE: $1" >> /dev/stderr; }
 DEBUG_LOG_STDOUT() { while IFS= read -r line; do log_message "STDOUT" "$line"; echo "$line" >> /dev/stderr; done; }
 
 # Clear previous log at the start of execution
-echo "--- Inizio Log prepare-commit-msg (SOLUZIONE FINALE v5.0): $(date) ---" > "$LOG_FILE"
+echo "--- Inizio Log prepare-commit-msg (SOLUZIONE FINALE v6.0): $(date) ---" > "$LOG_FILE"
 echo "----------------------------------------------------" >> "$LOG_FILE"
 echo "--- Inizio esecuzione prepare-commit-msg hook ---" >> "$LOG_FILE"
 echo "----------------------------------------------------" >> "$LOG_FILE"
@@ -162,34 +162,31 @@ fi
 DEBUG_LOG "Timestamp finale di $FILE_RELEASE_NOTES dopo stabilizzazione: '$AFTER_RN_FILE'"
 
 
-# --- Normalizzazione delle terminazioni di riga a LF (rimuovendo CR) ---
-# Questo passaggio è ancora utile per garantire la consistenza dei fine riga nel repository.
-if [ -f "$FILE_RELEASE_NOTES" ]; then
-    DEBUG_LOG "Normalizzo le terminazioni di riga di $FILE_RELEASE_NOTES a LF (rimuovendo CR)."
-    # Usa 'sed -i '' ' per la compatibilità con macOS. Per GNU sed (Linux), 'sed -i' è sufficiente.
-    if sed --version 2>/dev/null | grep -q 'GNU sed'; then
-        sed -i 's/\r//g' "$FILE_RELEASE_NOTES" >> "$LOG_FILE" 2>&1
-    else
-        sed -i '' 's/\r//g' "$FILE_RELEASE_NOTES" >> "$LOG_FILE" 2>&1
-    fi
-else
-    DEBUG_LOG "Il file $FILE_RELEASE_NOTES non esiste dopo l'esecuzione dell'app. Non è possibile normalizzare le terminazioni di riga."
-fi
+# --- RIMOZIONE DELLA NORMALIZZAZIONE CON SED ---
+# DEBUG_LOG "Normalizzo le terminazioni di riga di $FILE_RELEASE_NOTES a LF (rimuovendo CR)."
+# if [ -f "$FILE_RELEASE_NOTES" ]; then
+#     if sed --version 2>/dev/null | grep -q 'GNU sed'; then
+#         sed -i 's/\r//g' "$FILE_RELEASE_NOTES" >> "$LOG_FILE" 2>&1
+#     else
+#         sed -i '' 's/\r//g' "$FILE_RELEASE_NOTES" >> "$LOG_FILE" 2>&1
+#     fi
+# else
+#     DEBUG_LOG "Il file $FILE_RELEASE_NOTES non esiste dopo l'esecuzione dell'app. Non è possibile normalizzare le terminazioni di riga."
+# fi
 # --------------------------------------------------------------------------------------
 
 
-# Step 3: Check if the file was modified and proceed to add to index
-# Controllo se il timestamp è cambiato. Se no, non aggiungo.
+# Step 3: Check if the file was modified and proceed to add to index with --renormalize
 # La logica del timestamp serve anche a catturare eventuali modifiche da parte dell'app
 # nel caso in cui il file non fosse inizialmente nell'indice e fosse stato aggiunto ex-novo.
 if [ "$AFTER_RN_FILE" -gt "$BEFORE_RN_FILE" ] || ! git ls-files --error-unmatch "$FILE_RELEASE_NOTES" &>/dev/null; then
-    DEBUG_LOG "Il file $FILE_RELEASE_NOTES è stato modificato dall'applicazione o non era nell'indice. Lo aggiungo."
+    DEBUG_LOG "Il file $FILE_RELEASE_NOTES è stato modificato dall'applicazione o non era nell'indice. Lo aggiungo con --renormalize."
     
     # Check current status before adding
-    DEBUG_LOG "Stato dell'indice (staging area) PRIMA di 'git add' finale:"
+    DEBUG_LOG "Stato dell'indice (staging area) PRIMA di 'git add --renormalize' finale:"
     git status --porcelain | DEBUG_LOG_STDOUT
 
-    git add "$FILE_RELEASE_NOTES" >> "$LOG_FILE" 2>&1
+    git add --renormalize "$FILE_RELEASE_NOTES" >> "$LOG_FILE" 2>&1
 
     # Final check after adding to ensure no unstaged changes
     DEBUG_LOG "Controllo finale stato Git dopo add:"
@@ -198,8 +195,8 @@ if [ "$AFTER_RN_FILE" -gt "$BEFORE_RN_FILE" ] || ! git ls-files --error-unmatch 
         # Questo viene raggiunto solo se il file *NON* è in conflitto dopo l'add.
         INFO_LOG "✅ Successo: File $FILE_RELEASE_NOTES aggiornato e correttamente aggiunto all'indice."
     else
-        ERROR_LOG "❌ ERRORE CRITICO: Il file $FILE_RELEASE_NOTES è nell'indice ma ha modifiche non stagionate anche dopo 'git add'."
-        ERROR_LOG "Questo indica un problema persistente con l'indice di Git o una scrittura anomala non risolta dall'attesa e dalla re-normalizzazione."
+        ERROR_LOG "❌ ERRORE CRITICO: Il file $FILE_RELEASE_NOTES è nell'indice ma ha modifiche non stagionate anche dopo 'git add --renormalize'."
+        ERROR_LOG "Questo indica un problema persistente con l'indice di Git o una scrittura anomala non risolta dall'attesa e dalla re-normalizzazione di Git."
         ERROR_LOG "Commit annullato per evitare incoerenze."
         exit 1
     fi
