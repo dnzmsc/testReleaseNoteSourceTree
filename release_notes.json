@@ -43,6 +43,17 @@
       "commitDate": "2025-06-27 11:49:11 +0200",
       "commitHash": "633ae79b1e5fde30798c67ae9feb36b546076ba7",
       "excludedFromReleaseNote": true
+    },
+    {
+      "data": "27/06/2025 12:11:07",
+      "tipo": "Generico",
+      "modulo": "",
+      "descrizione": "aaaaamamma",
+      "commitAuthor": "cammoranesi",
+      "commitDesc": "proviamo  ma forse piangiamo",
+      "commitDate": "2025-06-27 12:10:26 +0200",
+      "commitHash": "a6dde2b034353335b94dababb77f56889895d51f",
+      "excludedFromReleaseNote": true
     }
   ]
 }
