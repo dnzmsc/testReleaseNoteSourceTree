@@ -153,6 +153,17 @@
       "commitDate": "2025-06-27 12:46:57 +0200",
       "commitHash": "33b364308f6a98cfeadf05485d50cab87d24b90f",
       "excludedFromReleaseNote": true
+    },
+    {
+      "data": "27/06/2025 12:51:20",
+      "tipo": "Generico",
+      "modulo": "",
+      "descrizione": "santini in prigione",
+      "commitAuthor": "cammoranesi",
+      "commitDesc": "santini in prigione",
+      "commitDate": "2025-06-27 12:50:05 +0200",
+      "commitHash": "21a84c420a70b22f8215987cc31da7f990c8f2fb",
+      "excludedFromReleaseNote": true
     }
   ]
 }

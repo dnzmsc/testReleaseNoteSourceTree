@@ -23,7 +23,7 @@ ERROR_LOG() { log_message "ERROR" "$1"; echo "❌ ERRORE: $1" >> /dev/stderr; }
 DEBUG_LOG_STDOUT() { while IFS= read -r line; do log_message "STDOUT" "$line"; echo "$line" >> /dev/stderr; done; }
 
 # Clear previous log at the start of execution
-echo "--- Inizio Log prepare-commit-msg (SOLUZIONE FINALE v3.0): $(date) ---" > "$LOG_FILE"
+echo "--- Inizio Log prepare-commit-msg (SOLUZIONE FINALE v4.0): $(date) ---" > "$LOG_FILE"
 echo "----------------------------------------------------" >> "$LOG_FILE"
 echo "--- Inizio esecuzione prepare-commit-msg hook ---" >> "$LOG_FILE"
 echo "----------------------------------------------------" >> "$LOG_FILE"
@@ -53,16 +53,15 @@ wait_for_stable_file() {
     local prev_hash=""
     local same_count=0
     local max_wait_time_seconds=10 # Tempo massimo di attesa in secondi
-    local sleep_interval_seconds=0.2 # Intervallo di sleep
-
-    # Converti tutto in millisecondi per aritmetica intera in bash
-    local max_wait_time_ms=$((max_wait_time_seconds * 1000))
-    local sleep_interval_ms=$(echo "$sleep_interval_seconds * 1000" | bc) # Usa bc per il calcolo iniziale se sleep_interval_seconds è float
+    local sleep_interval_ms=200 # Intervallo di sleep in millisecondi (0.2s)
     local elapsed_time_ms=0
 
     DEBUG_LOG "Inizio attesa stabilità per il file: $file_to_check (max ${max_wait_time_seconds}s)"
-    while [ "$elapsed_time_ms" -lt "$max_wait_time_ms" ]; do
-        sleep "$sleep_interval_seconds"
+    while [ "$elapsed_time_ms" -lt "$((max_wait_time_seconds * 1000))" ]; do
+        # Sleep in secondi, convertendo da millisecondi
+        sleep_seconds=$(echo "scale=2; $sleep_interval_ms / 1000" | bc)
+        sleep "$sleep_seconds"
+        
         elapsed_time_ms=$((elapsed_time_ms + sleep_interval_ms))
 
         # Controlla se il file esiste prima di calcolare lo shasum
