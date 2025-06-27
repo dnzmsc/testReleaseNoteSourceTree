@@ -11,7 +11,7 @@ if [[ "$COMMIT_SOURCE" == "merge" || "$COMMIT_SOURCE" == "squash" || "$COMMIT_SO
 fi
 
 RELEASE_NOTES_APP="./release-notes-app"
-RELEASE_NOTES_FILE="release_note.json"
+RELEASE_NOTES_FILE="release_notes.json"
 
 # Verifica se l'app è eseguibile
 if [ ! -x "$RELEASE_NOTES_APP" ]; then
