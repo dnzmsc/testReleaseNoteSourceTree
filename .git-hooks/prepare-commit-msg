@@ -23,7 +23,7 @@ ERROR_LOG() { log_message "ERROR" "$1"; echo "❌ ERRORE: $1" >> /dev/stderr; }
 DEBUG_LOG_STDOUT() { while IFS= read -r line; do log_message "STDOUT" "$line"; echo "$line" >> /dev/stderr; done; }
 
 # Clear previous log at the start of execution
-echo "--- Inizio Log prepare-commit-msg (SOLUZIONE FINALE v6.0): $(date) ---" > "$LOG_FILE"
+echo "--- Inizio Log prepare-commit-msg (SOLUZIONE FINALE v7.0): $(date) ---" > "$LOG_FILE"
 echo "----------------------------------------------------" >> "$LOG_FILE"
 echo "--- Inizio esecuzione prepare-commit-msg hook ---" >> "$LOG_FILE"
 echo "----------------------------------------------------" >> "$LOG_FILE"
@@ -163,16 +163,7 @@ DEBUG_LOG "Timestamp finale di $FILE_RELEASE_NOTES dopo stabilizzazione: '$AFTER
 
 
 # --- RIMOZIONE DELLA NORMALIZZAZIONE CON SED ---
-# DEBUG_LOG "Normalizzo le terminazioni di riga di $FILE_RELEASE_NOTES a LF (rimuovendo CR)."
-# if [ -f "$FILE_RELEASE_NOTES" ]; then
-#     if sed --version 2>/dev/null | grep -q 'GNU sed'; then
-#         sed -i 's/\r//g' "$FILE_RELEASE_NOTES" >> "$LOG_FILE" 2>&1
-#     else
-#         sed -i '' 's/\r//g' "$FILE_RELEASE_NOTES" >> "$LOG_FILE" 2>&1
-#     fi
-# else
-#     DEBUG_LOG "Il file $FILE_RELEASE_NOTES non esiste dopo l'esecuzione dell'app. Non è possibile normalizzare le terminazioni di riga."
-# fi
+# (Questo blocco è stato commentato per lasciare che sia Git a normalizzare con --renormalize)
 # --------------------------------------------------------------------------------------
 
 
@@ -187,8 +178,22 @@ if [ "$AFTER_RN_FILE" -gt "$BEFORE_RN_FILE" ] || ! git ls-files --error-unmatch 
     git status --porcelain | DEBUG_LOG_STDOUT
 
     git add --renormalize "$FILE_RELEASE_NOTES" >> "$LOG_FILE" 2>&1
+    ADD_EXIT_CODE=$? # Cattura il codice di uscita di git add
 
-    # Final check after adding to ensure no unstaged changes
+    if [ "$ADD_EXIT_CODE" -ne 0 ]; then
+        ERROR_LOG "❌ ERRORE CRITICO: 'git add --renormalize $FILE_RELEASE_NOTES' è fallito con codice di uscita $ADD_EXIT_CODE."
+        ERROR_LOG "Questo impedisce di aggiungere il file all'indice. Commit annullato."
+        exit 1
+    fi
+
+    # Verify if the file is now truly in the index after the add command
+    if ! git ls-files --error-unmatch "$FILE_RELEASE_NOTES" &>/dev/null; then
+        ERROR_LOG "❌ ERRORE CRITICO: Nonostante 'git add --renormalize' abbia terminato senza errori ($ADD_EXIT_CODE), il file $FILE_RELEASE_NOTES non è stato trovato nell'indice di Git."
+        ERROR_LOG "Questo indica un problema profondo con l'interazione tra Git e il file system/SourceTree. Commit annullato."
+        exit 1
+    fi
+
+    # Final check after adding to ensure no unstaged changes (this is the original check)
     DEBUG_LOG "Controllo finale stato Git dopo add:"
     git status --porcelain | DEBUG_LOG_STDOUT
     if git diff --quiet --exit-code --cached "$FILE_RELEASE_NOTES"; then
