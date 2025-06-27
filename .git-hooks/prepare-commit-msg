@@ -9,7 +9,7 @@ COMMIT_MSG_FILE="$1" # Il primo argomento dell'hook è il percorso del file del 
 LOG_FILE=".git-hooks/prepare-commit-msg.log"
 # Reindirizza stdout e stderr al file di log
 exec > >(tee -a "$LOG_FILE") 2>&1
-echo "--- Inizio Log prepare-commit-msg (VERS. FINALE E PULITA): $(date) ---"
+echo "--- Inizio Log prepare-commit-msg (SOLUZIONE FINALE): $(date) ---"
 
 # Variabile d'ambiente per indicare che siamo dentro l'hook
 export GIT_INSIDE_HOOK_COMMIT=true
@@ -21,8 +21,13 @@ echo "DEBUG INFO: Percorso del file messaggio di commit: $COMMIT_MSG_FILE"
 echo "DEBUG INFO: Percorso dell'applicazione Fyne: $APP"
 echo "DEBUG INFO: Percorso del file Release Notes JSON: $FILE_RELEASE_NOTES"
 
+# --- PASSO CRITICO: Pulire l'indice all'inizio per evitare stati ambigui ---
+# Questo comando assicura che il file non sia già in uno stato "modified" in staging
+# prima che l'app lo tocchi. Resetta la versione staged del file a HEAD.
+echo "DEBUG INFO: Eseguo 'git reset HEAD -- \"$FILE_RELEASE_NOTES\"' per pulire lo stato staged del file."
+git reset HEAD -- "$FILE_RELEASE_NOTES" 2>/dev/null || true # Ignora errori se il file non è tracciato
+
 # Salva il timestamp di ultima modifica del file release_notes.json PRIMA di avviare l'app
-# Nota: La sintassi di `stat` varia tra macOS e Linux/Git Bash
 if [[ "$(uname)" == "Darwin" ]]; then # macOS
     BEFORE_RN_FILE=$(stat -f %m "$FILE_RELEASE_NOTES" 2>/dev/null || echo 0)
 else # Linux/Windows (con Git Bash)
@@ -75,9 +80,18 @@ if [ "$AFTER_RN_FILE" -le "$BEFORE_RN_FILE" ]; then
     exit 1
 fi
 
-# --- Aggiungi il file release_notes.json all'indice ---
+# --- PASSO CRITICO: Aggiungi il file release_notes.json all'indice ---
 echo "DEBUG INFO: Aggiungo $FILE_RELEASE_NOTES all'indice."
 git add "$FILE_RELEASE_NOTES"
+
+# Verifica finale: Dopo il `git add`, il file dovrebbe essere "pulito" nello staging area.
+# Se non lo è, allora c'è un problema irrisolvibile di EOL o di corruzione dell'indice.
+if ! git diff --quiet --exit-code --cached "$FILE_RELEASE_NOTES"; then
+    echo "❌ ERRORE CRITICO: Il file $FILE_RELEASE_NOTES è nell'indice ma ha modifiche non stagionate anche dopo 'git add'."
+    echo "Questo indica un problema persistente con la gestione dei fine riga o l'indice di Git."
+    echo "Commit annullato per evitare incoerenze."
+    exit 1
+fi
 
 echo "DEBUG INFO: Controllo finale stato Git dopo add:"
 git status --porcelain

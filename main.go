@@ -164,7 +164,6 @@ func main() {
 
 	// 2. Dichiarazione delle variabili per i campi del form (e puntatori per i bottoni)
 	excludedFromReleaseNote := widget.NewCheck("Escludi dalla Nota di Rilascio", nil)
-	// Tipi: cambiato "Chore" in "Generico"
 	tipi := []string{"Funzionalità", "Correzione Bug", "Refactoring", "Documentazione", "Generico"}
 	tipo := widget.NewSelect(tipi, nil)
 	modulo := widget.NewSelect(modules, nil)
@@ -173,22 +172,19 @@ func main() {
 	internalTicket := widget.NewEntry()
 	clientTicket := widget.NewEntry()
 
-	// Dichiarazione dei puntatori ai bottoni (inizialmente nil, assegnati dopo la definizione di saveNoteFunc)
 	var saveBtn *widget.Button
 	var addNoteBtn *widget.Button
 	var closeBtn *widget.Button
 
-	// Label per la descrizione che cambia dinamicamente
 	descrizioneLabel := widget.NewLabel("Descrizione (min. 20 caratteri):")
 
-	// Listener per il checkbox excludedFromReleaseNote (usato qui per inizializzare e gestire la label)
 	excludedFromReleaseNote.OnChanged = func(checked bool) {
 		if checked {
-			descrizioneLabel.SetText("Descrizione:") // Rimuove il limite visivo
+			descrizioneLabel.SetText("Descrizione:")
 		} else {
-			descrizioneLabel.SetText("Descrizione (min. 20 caratteri):") // Ripristina il limite visivo
+			descrizioneLabel.SetText("Descrizione (min. 20 caratteri):")
 			if tipo.Selected == "" {
-				tipo.SetSelected("Generico") // Imposta default se torna obbligatorio e non ha selezione
+				tipo.SetSelected("Generico")
 			}
 		}
 		descrizioneLabel.Refresh()
@@ -197,10 +193,8 @@ func main() {
 	// 3. Dichiarazione delle Label per i dettagli del commit
 	commitAuthorLabel := widget.NewLabel(fmt.Sprintf("Autore Commit: %s", commitAuthor))
 	commitHashLabel := widget.NewLabel(fmt.Sprintf("Hash Commit: %s", commitHash))
-	// Messaggio Commit: ora è una Label, non modificabile, come richiesto
 	commitDescLabel := widget.NewLabel(fmt.Sprintf("Messaggio Commit: %s", commitDesc))
 
-	// Formatta la data del commit per la visualizzazione italiana
 	var commitDateLabel *widget.Label
 	// Il formato di parsing deve corrispondere esattamente al formato di output di 'git log -1 --format=%ci'
 	// Che tipicamente è "YYYY-MM-DD HH:MM:SS +ZZZZ" (es. "2006-01-02 15:04:05 +0100")
@@ -215,7 +209,7 @@ func main() {
 	}
 
 	// 4. Dichiarazione delle variabili di stato
-	var isAnyNoteSavedForCurrentCommit bool // Indica se almeno una nota è stata salvata per questo commit
+	var isAnyNoteSavedForCurrentCommit bool
 
 	// 5. Dichiarazione e inizializzazione dell'etichetta di stato della form
 	formStatusLabel := widget.NewLabel("Nuova nota: inserisci i dettagli.")
@@ -245,23 +239,21 @@ func main() {
 
 	// 6. Definizione delle funzioni helper
 	resetForm := func() {
-		// Questi reset devono avvenire solo qui, all'inizio e al click su "Aggiungi Nuova Nota"
-		tipo.SetSelected("Generico") // Default a "Generico"
-		modulo.SetSelected("")       // Svuota il campo Modulo
-		modulo.Refresh()             // Forzo l'aggiornamento visivo del campo Modulo
+		tipo.SetSelected("Generico")
+		modulo.SetSelected("")
+		modulo.Refresh()
 		titolo.SetText("")
 		descrizione.SetText("")
 		internalTicket.SetText("")
 		clientTicket.SetText("")
 		excludedFromReleaseNote.SetChecked(false)
-		formStatusLabel.SetText("Nuova nota: inserisci i dettagli.") // Resetta il messaggio di stato
+		formStatusLabel.SetText("Nuova nota: inserisci i dettagli.")
 		formStatusLabel.Refresh()
 
-		// Riabilita tutti i campi e il pulsante "Salva" per la nuova nota
 		setFormFieldsEnabled(true)
 		saveBtn.Enable()
-		if addNoteBtn != nil { // Assicurati che il puntatore non sia nil prima di usare
-			addNoteBtn.Hide() // Nasconde di nuovo il pulsante "Aggiungi Nuova Nota"
+		if addNoteBtn != nil {
+			addNoteBtn.Hide()
 		}
 	}
 
@@ -269,7 +261,6 @@ func main() {
 	saveNoteFunc := func() {
 		isExcluded := excludedFromReleaseNote.Checked
 
-		// Validazioni condizionali
 		if !isExcluded {
 			if tipo.Selected == "" {
 				dialog.ShowError(fmt.Errorf("Tipo non selezionato."), w)
@@ -279,11 +270,11 @@ func main() {
 				dialog.ShowError(fmt.Errorf("Modulo non selezionato."), w)
 				return
 			}
-			if len(descrizione.Text) < 20 {
-				dialog.ShowError(fmt.Errorf("Descrizione troppo corta (minimo 20 caratteri)."), w)
+			if len(strings.TrimSpace(descrizione.Text)) < 20 {
+				dialog.ShowError(fmt.Errorf("Descrizione troppo corta (minimo 20 caratteri, spazi esclusi)."), w)
 				return
 			}
-		} else { // Se è esclusa, controlla solo che la descrizione non sia vuota
+		} else {
 			if strings.TrimSpace(descrizione.Text) == "" {
 				dialog.ShowError(fmt.Errorf("La Descrizione non può essere vuota, anche se la nota è esclusa dalla Release Note."), w)
 				return

@@ -87,6 +87,50 @@
       "commitDate": "2025-06-26 17:44:04 +0200",
       "commitHash": "a4df96aaf389edf399acb221d15fcd2c5ebd227a",
       "excludedFromReleaseNote": true
+    },
+    {
+      "data": "26/06/2025 17:55:36",
+      "tipo": "Generico",
+      "modulo": "",
+      "descrizione": "a",
+      "commitAuthor": "cammoranesi",
+      "commitDesc": "test",
+      "commitDate": "2025-06-26 17:45:10 +0200",
+      "commitHash": "685d4a77a864be015fc364c5e4d7ce4c0191e3ca",
+      "excludedFromReleaseNote": true
+    },
+    {
+      "data": "27/06/2025 09:18:03",
+      "tipo": "Generico",
+      "modulo": "",
+      "descrizione": "a",
+      "commitAuthor": "cammoranesi",
+      "commitDesc": "test",
+      "commitDate": "2025-06-26 17:45:10 +0200",
+      "commitHash": "685d4a77a864be015fc364c5e4d7ce4c0191e3ca",
+      "excludedFromReleaseNote": true
+    },
+    {
+      "data": "27/06/2025 09:30:14",
+      "tipo": "Generico",
+      "modulo": "",
+      "descrizione": "a",
+      "commitAuthor": "cammoranesi",
+      "commitDesc": "test",
+      "commitDate": "2025-06-26 17:45:10 +0200",
+      "commitHash": "685d4a77a864be015fc364c5e4d7ce4c0191e3ca",
+      "excludedFromReleaseNote": true
+    },
+    {
+      "data": "27/06/2025 09:44:59",
+      "tipo": "Generico",
+      "modulo": "",
+      "descrizione": "a",
+      "commitAuthor": "cammoranesi",
+      "commitDesc": "Fix: Normalize line endings with .gitattributes and enforce LF for JSON",
+      "commitDate": "2025-06-26 17:45:10 +0200",
+      "commitHash": "685d4a77a864be015fc364c5e4d7ce4c0191e3ca",
+      "excludedFromReleaseNote": true
     }
   ]
 }
