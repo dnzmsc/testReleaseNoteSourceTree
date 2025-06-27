@@ -197,6 +197,50 @@
       "commitDate": "2025-06-27 14:18:05 +0200",
       "commitHash": "003ce17bfaaaf1757e071bb0722a9ae443e540ba",
       "excludedFromReleaseNote": true
+    },
+    {
+      "data": "27/06/2025 15:17:05",
+      "tipo": "Generico",
+      "modulo": "",
+      "descrizione": "asdasdada",
+      "commitAuthor": "cammoranesi",
+      "commitDesc": "la sera",
+      "commitDate": "2025-06-27 15:15:49 +0200",
+      "commitHash": "1c01ab9774d1fc6a9ace76b0840b5e4276cc5745",
+      "excludedFromReleaseNote": true
+    },
+    {
+      "data": "27/06/2025 15:24:29",
+      "tipo": "Generico",
+      "modulo": "",
+      "descrizione": "aaaa",
+      "commitAuthor": "cammoranesi",
+      "commitDesc": "da roga do cpmand",
+      "commitDate": "2025-06-27 15:15:49 +0200",
+      "commitHash": "1c01ab9774d1fc6a9ace76b0840b5e4276cc5745",
+      "excludedFromReleaseNote": true
+    },
+    {
+      "data": "27/06/2025 15:28:11",
+      "tipo": "Generico",
+      "modulo": "",
+      "descrizione": "aasdddazz",
+      "commitAuthor": "cammoranesi",
+      "commitDesc": "Commit di prova dopo la ricostruzione dell'indice",
+      "commitDate": "2025-06-27 15:15:49 +0200",
+      "commitHash": "1c01ab9774d1fc6a9ace76b0840b5e4276cc5745",
+      "excludedFromReleaseNote": true
+    },
+    {
+      "data": "27/06/2025 15:34:56",
+      "tipo": "Generico",
+      "modulo": "",
+      "descrizione": "asdasdas",
+      "commitAuthor": "cammoranesi",
+      "commitDesc": "Commit di prova dopo la ricostruzione dell'indice",
+      "commitDate": "2025-06-27 15:15:49 +0200",
+      "commitHash": "1c01ab9774d1fc6a9ace76b0840b5e4276cc5745",
+      "excludedFromReleaseNote": true
     }
   ]
 }
