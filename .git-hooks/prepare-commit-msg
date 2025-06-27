@@ -28,60 +28,31 @@ if [ $STATUS -ne 0 ]; then
   exit 1
 fi
 
-# Attende che il file sia stabile
+# Funzione per aspettare che un file sia "stabile"
 wait_for_stable_file() {
   local file="$1"
   local prev_hash=""
   local same_count=0
-  local max_attempts=50
-  local attempt=0
-
-  while [ $attempt -lt $max_attempts ]; do
-    if [ ! -f "$file" ]; then
-      sleep 0.1
-      ((attempt++))
-      continue
-    fi
-
+  while true; do
+    sleep 0.2
     local hash=$(shasum "$file" 2>/dev/null | awk '{ print $1 }')
-
     if [ "$hash" = "$prev_hash" ]; then
       ((same_count++))
       if [ "$same_count" -ge 2 ]; then
-        return 0
+        break
       fi
     else
       same_count=0
       prev_hash="$hash"
     fi
-
-    sleep 0.2
-    ((attempt++))
   done
-
-  echo "Errore: timeout nell'attesa del file stabile: $file" >&2
-  return 1
 }
 
-# Aspetta la stabilizzazione del file
-wait_for_stable_file "$RELEASE_NOTES_FILE" || exit 1
-
-# Reinizializza l'indice con i file già in staging (escluso HEAD!)
-TMP_INDEX=".git/tmp_index_for_release_notes"
-
-# Crea una copia dell'indice corrente
-cp .git/index "$TMP_INDEX"
-
-# Aggiunge il file release_notes.json al commit
-GIT_INDEX_FILE="$TMP_INDEX" git add "$RELEASE_NOTES_FILE"
-
-# Ricompone il commit con il nuovo indice (che include anche il file)
-tree=$(GIT_INDEX_FILE="$TMP_INDEX" git write-tree)
-parent=$(git rev-parse HEAD)
-new_commit=$(GIT_INDEX_FILE="$TMP_INDEX" git commit-tree "$tree" -p "$parent" -F "$COMMIT_MSG_FILE")
-
-# Sostituisce il commit in corso
-git reset --soft "$new_commit"
-
-# Rimuove l’indice temporaneo
-rm "$TMP_INDEX"
+# Aspetta che il file esista e sia stabile
+if [ -f "$RELEASE_NOTES_FILE" ]; then
+  wait_for_stable_file "$RELEASE_NOTES_FILE"
+  git add "$RELEASE_NOTES_FILE"
+else
+  echo "Errore: $RELEASE_NOTES_FILE non trovato dopo l'esecuzione dell'app." >&2
+  exit 1
+fi
