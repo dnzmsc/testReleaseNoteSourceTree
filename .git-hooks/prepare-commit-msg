@@ -47,7 +47,7 @@ while true; do
   elapsed=$((now - start_time))
 
   if [[ -f "$RELEASE_NOTES_FILE" ]]; then
-    mmod_time=$(get_mtime "$RELEASE_NOTES_FILE" 2>/dev/null)
+    mod_time=$(get_mtime "$RELEASE_NOTES_FILE" 2>/dev/null)
 
     if [[ -n "$mod_time" ]]; then
       age=$((now - mod_time))
