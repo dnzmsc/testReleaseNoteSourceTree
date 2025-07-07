@@ -6,7 +6,7 @@ COMMIT_MSG_FILE="$1"   # Questo è il path al file che vuoi passare alla tua app
 
 # Path dell'app GUI
 RELEASE_NOTES_APP="./release-notes-app"
-RELEASE_NOTES_FILE="release-notes.json"
+RELEASE_NOTES_FILE="/Users/cammoranesi/testReleaseNoteSourceTree/release_notes.json"
 
 # Timeout massimo per attendere la scrittura del file (in secondi)
 MAX_WAIT=30

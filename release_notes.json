@@ -263,6 +263,17 @@
       "commitDate": "2025-07-07 11:14:10 +0200",
       "commitHash": "4153a02be01044a180844364fdcc31835fb4831a",
       "excludedFromReleaseNote": true
+    },
+    {
+      "data": "07/07/2025 11:27:03",
+      "tipo": "Generico",
+      "modulo": "",
+      "descrizione": "asdadasda",
+      "commitAuthor": "cammoranesi",
+      "commitDesc": "nonononon",
+      "commitDate": "2025-07-07 11:26:30 +0200",
+      "commitHash": "c944029eb868c05f6353b3681c7a82f294bff8ae",
+      "excludedFromReleaseNote": true
     }
   ]
 }
