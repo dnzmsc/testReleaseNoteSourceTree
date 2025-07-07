@@ -3,37 +3,50 @@
 
 # Parametri passati da Git al prepare-commit-msg
 COMMIT_MSG_FILE="$1"   # Questo è il path al file che vuoi passare alla tua app
-COMMIT_SOURCE="$2"
-SHA1="$3"
 
 # Path dell'app GUI
 RELEASE_NOTES_APP="./release-notes-app"
-RELEASE_NOTES_FILE="./release-notes.json"
+RELEASE_NOTES_FILE="release-notes.json"
+
+# Timeout massimo per attendere la scrittura del file (in secondi)
+MAX_WAIT=30
+WAIT_INTERVAL=0.5
 
 # Lancia la GUI, passando il file del commit come parametro (come nel tuo main.go)
 "$RELEASE_NOTES_APP" "$COMMIT_MSG_FILE"
+APP_EXIT_CODE=$?
 
 # Verifica uscita dell'app
-if [[ $? -ne 0 ]]; then
-  echo "❌ Commit annullato: l'app è stata chiusa o ha dato errore."
+if [[ "$APP_EXIT_CODE" -ne 0 ]]; then
+  echo "❌ Commit annullato: l'app è stata chiusa o ha restituito un errore."
   exit 1
 fi
 
-# Controlla che release-notes.json sia stato scritto
-if [[ ! -f "$RELEASE_NOTES_FILE" ]]; then
-  echo "❌ Commit annullato: file release-notes.json non trovato."
-  exit 1
-fi
+# Ora attendi che il file release-notes.json sia presente e aggiornato
+start_time=$(date +%s)
 
-# Controlla che sia stato aggiornato recentemente (entro 60 secondi)
-NOW=$(date +%s)
-MODIFIED=$(stat -c %Y "$RELEASE_NOTES_FILE")
-AGE=$((NOW - MODIFIED))
+while true; do
+  now=$(date +%s)
+  elapsed=$((now - start_time))
 
-if [[ "$AGE" -gt 60 ]]; then
-  echo "❌ Commit annullato: il file release-notes.json non è stato aggiornato di recente."
-  exit 1
-fi
+  if [[ -f "$RELEASE_NOTES_FILE" ]]; then
+    mod_time=$(stat -c %Y "$RELEASE_NOTES_FILE")
+    age=$((now - mod_time))
+
+    if [[ "$age" -le 5 ]]; then
+      # Il file è stato aggiornato di recente: tutto ok
+      break
+    fi
+  fi
+
+  if (( elapsed >= MAX_WAIT )); then
+    echo "❌ Commit annullato: timeout in attesa del file $RELEASE_NOTES_FILE"
+    exit 1
+  fi
+
+  # Aspetta un po' prima di ricontrollare
+  sleep "$WAIT_INTERVAL"
+done
 
 # Aggiunge il file al commit
 git add "$RELEASE_NOTES_FILE"

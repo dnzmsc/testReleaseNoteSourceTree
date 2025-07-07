@@ -252,6 +252,17 @@
       "commitDate": "2025-07-07 11:06:04 +0200",
       "commitHash": "8df8e8126bc50191d644d34de1f2635814531e43",
       "excludedFromReleaseNote": true
+    },
+    {
+      "data": "07/07/2025 11:15:03",
+      "tipo": "Generico",
+      "modulo": "",
+      "descrizione": "asdada",
+      "commitAuthor": "cammoranesi",
+      "commitDesc": "ciccia",
+      "commitDate": "2025-07-07 11:14:10 +0200",
+      "commitHash": "4153a02be01044a180844364fdcc31835fb4831a",
+      "excludedFromReleaseNote": true
     }
   ]
 }
