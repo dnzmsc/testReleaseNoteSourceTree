@@ -241,6 +241,17 @@
       "commitDate": "2025-06-27 15:15:49 +0200",
       "commitHash": "1c01ab9774d1fc6a9ace76b0840b5e4276cc5745",
       "excludedFromReleaseNote": true
+    },
+    {
+      "data": "07/07/2025 11:07:47",
+      "tipo": "Generico",
+      "modulo": "",
+      "descrizione": "prova",
+      "commitAuthor": "cammoranesi",
+      "commitDesc": "test non funzionante",
+      "commitDate": "2025-07-07 11:06:04 +0200",
+      "commitHash": "8df8e8126bc50191d644d34de1f2635814531e43",
+      "excludedFromReleaseNote": true
     }
   ]
 }

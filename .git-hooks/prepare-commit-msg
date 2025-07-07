@@ -8,7 +8,7 @@ SHA1="$3"
 
 # Path dell'app GUI
 RELEASE_NOTES_APP="./release-notes-app"
-RELEASE_NOTES_FILE="release-notes.json"
+RELEASE_NOTES_FILE="./release-notes.json"
 
 # Lancia la GUI, passando il file del commit come parametro (come nel tuo main.go)
 "$RELEASE_NOTES_APP" "$COMMIT_MSG_FILE"
