@@ -1,75 +1,25 @@
-
 #!/bin/bash
+COMMIT_MSG_FILE="$1"
+REPO_ROOT=$(git rev-parse --show-toplevel)
+TMP_JSON="$REPO_ROOT/.release_notes_tmp.json"
 
-# Parametri passati da Git al prepare-commit-msg
-COMMIT_MSG_FILE="$1"   # Questo è il path al file che vuoi passare alla tua app
+# Leggo solo la prima riga del messaggio
+MESSAGE=$(head -n 1 "$COMMIT_MSG_FILE" | sed 's/"/\\"/g') # scapo eventuali doppi apici
 
-# Path dell'app GUI
-RELEASE_NOTES_APP="./release-notes-app"
-RELEASE_NOTES_FILE="/Users/cammoranesi/testReleaseNoteSourceTree/release_notes.json"
-
-# Timeout massimo per attendere la scrittura del file (in secondi)
-MAX_WAIT=30
-WAIT_INTERVAL=0.5
-
-# === FUNZIONE: ottieni ultimo tempo modifica (compatibile con Mac/Linux/Windows Git Bash) ===
-get_mtime() {
-  if [[ "$OSTYPE" == "darwin"* ]]; then
-    # macOS
-    stat -f %m "$1"
-  elif [[ "$OSTYPE" == "linux-gnu"* ]]; then
-    # Linux
-    stat -c %Y "$1"
-  elif [[ "$OSTYPE" == "msys" || "$OSTYPE" == "cygwin" ]]; then
-    # Git Bash o Cygwin su Windows
-    stat -c %Y "$1"
-  else
-    echo "❌ Sistema operativo non supportato: $OSTYPE" >&2
-    exit 1
-  fi
-}
-
-# Lancia la GUI, passando il file del commit come parametro (come nel tuo main.go)
-"$RELEASE_NOTES_APP" "$COMMIT_MSG_FILE"
-APP_EXIT_CODE=$?
-
-# Verifica uscita dell'app
-if [[ "$APP_EXIT_CODE" -ne 0 ]]; then
-  echo "❌ Commit annullato: l'app è stata chiusa o ha restituito un errore."
-  exit 1
+# Data ISO 8601 portabile (su macOS fallback)
+if date --iso-8601=seconds >/dev/null 2>&1; then
+  DATE=$(date --iso-8601=seconds)
+else
+  DATE=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
 fi
 
-# Ora attendi che il file release-notes.json sia presente e aggiornato
-start_time=$(date +%s)
+# Scrivo il JSON "a mano"
+cat > "$TMP_JSON" << EOF
+{
+  "message": "$MESSAGE",
+  "date": "$DATE"
+}
+EOF
 
-while true; do
-  now=$(date +%s)
-  elapsed=$((now - start_time))
-
-  if [[ -f "$RELEASE_NOTES_FILE" ]]; then
-    mod_time=$(get_mtime "$RELEASE_NOTES_FILE" 2>/dev/null)
-
-    if [[ -n "$mod_time" ]]; then
-      age=$((now - mod_time))
-
-      if (( age <= 5 )); then
-        # Il file è stato aggiornato di recente: tutto ok
-        break
-      fi
-    fi
-  fi
-
-  if (( elapsed >= MAX_WAIT )); then
-    echo "❌ Commit annullato: timeout in attesa del file $RELEASE_NOTES_FILE"
-    exit 1
-  fi
-
-  # Aspetta un po' prima di ricontrollare
-  sleep "$WAIT_INTERVAL"
-done
-
-# Aggiunge il file al commit
-git add "$RELEASE_NOTES_FILE"
-
-# Tutto ok
 exit 0
+
