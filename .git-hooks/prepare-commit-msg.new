@@ -1,0 +1,17 @@
+#!/bin/bash
+# prepare-commit-msg hook
+# Invoked by `git commit` before the commit message is opened in the editor
+
+COMMIT_MSG_FILE="$1"
+REPO_ROOT=$(git rev-parse --show-toplevel)
+RELEASE_NOTES_JSON="$REPO_ROOT/release_notes.json"
+
+# Tool path (should be in PATH or use absolute path)
+RELEASE_TOOL="release-notes"
+
+# Ensure release_notes.json exists (create empty if missing)
+if [ ! -f "$RELEASE_NOTES_JSON" ]; then
+  echo '{"releases":[]}' > "$RELEASE_NOTES_JSON"
+fi
+
+exit 0

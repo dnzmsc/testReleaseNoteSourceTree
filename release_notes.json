@@ -329,6 +329,28 @@
       "commitDate": "2025-07-07 12:06:35 +0200",
       "commitHash": "32c778c6e3646b0e707a4cbd4377fb97014edd41",
       "excludedFromReleaseNote": true
+    },
+    {
+      "data": "29/01/2026 10:25:48",
+      "tipo": "Correzione Bug",
+      "modulo": "CORE",
+      "descrizione": "This is a test release note with more than twenty characters",
+      "commitAuthor": "cammoranesi",
+      "commitDesc": "Test commit message",
+      "commitDate": "2025-09-01 11:11:04 +0200",
+      "commitHash": "48201646ffe0436b31a746ba225a06963e148163",
+      "excludedFromReleaseNote": false
+    },
+    {
+      "data": "29/01/2026 10:32:33",
+      "tipo": "Correzione Bug",
+      "modulo": "CORE",
+      "descrizione": "This is a test release note with more than twenty characters",
+      "commitAuthor": "cammoranesi",
+      "commitDesc": "Test commit message",
+      "commitDate": "2025-09-01 11:11:04 +0200",
+      "commitHash": "48201646ffe0436b31a746ba225a06963e148163",
+      "excludedFromReleaseNote": false
     }
   ]
 }

@@ -1,0 +1,51 @@
+#!/bin/bash
+# pre-commit hook
+# Invoked before the commit is finalized. Must exit with 0 to allow commit.
+
+REPO_ROOT=$(git rev-parse --show-toplevel)
+COMMIT_MSG_FILE="${GIT_INDEX_FILE%.lock}/commit-editmsg"
+
+# Fallback if GIT_INDEX_FILE not set
+if [ ! -f "$COMMIT_MSG_FILE" ]; then
+  # Try common locations
+  if [ -f "$REPO_ROOT/.git/COMMIT_EDITMSG" ]; then
+    COMMIT_MSG_FILE="$REPO_ROOT/.git/COMMIT_EDITMSG"
+  else
+    # Last resort: use first argument (path provided by Git)
+    COMMIT_MSG_FILE="$1"
+  fi
+fi
+
+RELEASE_NOTES_JSON="$REPO_ROOT/release_notes.json"
+
+# Tool path
+RELEASE_TOOL="release-notes"
+
+# Check if tool exists
+if ! command -v "$RELEASE_TOOL" &> /dev/null; then
+  echo "ERROR: release-notes tool not found in PATH"
+  echo "Install it or ensure RELEASE_TOOL path is correct"
+  exit 1
+fi
+
+# Initialize release_notes.json if missing
+if [ ! -f "$RELEASE_NOTES_JSON" ]; then
+  echo '{"releases":[]}' > "$RELEASE_NOTES_JSON"
+fi
+
+# Launch the tool in web UI mode (--serve)
+# This will open the browser for the user to fill the form
+"$RELEASE_TOOL" --serve :9999 --commit-msg "$COMMIT_MSG_FILE" --json-out "$RELEASE_NOTES_JSON"
+
+TOOL_EXIT=$?
+
+# Check if tool ran successfully (0 = note saved)
+if [ $TOOL_EXIT -ne 0 ]; then
+  echo "ERROR: Release note was not saved. Commit aborted."
+  exit 1
+fi
+
+# Auto-stage the release_notes.json file
+git add "$RELEASE_NOTES_JSON"
+
+exit 0
