@@ -20,4 +20,3 @@ git add "$RELEASE_NOTES"
 rm "$TMP_JSON"
 
 exit 0
-
