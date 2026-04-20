@@ -283,12 +283,12 @@ func showReleaseForm(modules []string, author, commitDesc, commitDate, outputFil
 		w.Close()
 	})
 	completeBtn.Importance = widget.HighImportance
-	completeBtn.Hide()
+	completeBtn.Disable()
 
 	saveBtn := widget.NewButtonWithIcon("Salva Nota", theme.DocumentSaveIcon(), func() {
 		if saveNote() {
 			resetForm()
-			completeBtn.Show()
+			completeBtn.Enable()
 		}
 	})
 	saveBtn.Importance = widget.HighImportance

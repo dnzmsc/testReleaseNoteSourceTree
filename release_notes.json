@@ -69,6 +69,42 @@
       "commitDate": "2026-04-20 14:37:36",
       "commitHash": "2b7f51f6ef12c9b447fd335d1482dbcba217cd7a",
       "excludedFromReleaseNote": true
+    },
+    {
+      "data": "20/04/2026 14:39:36",
+      "tipo": "",
+      "modulo": "",
+      "descrizione": "non serve a niente, era solo una prova",
+      "commitAuthor": "cammoranesi",
+      "commitDesc": "test",
+      "commitDate": "2026-04-20 14:39:05",
+      "commitHash": "67981ee56f6c51ac47e1daf35f7debd25c91ddcb",
+      "excludedFromReleaseNote": true
+    },
+    {
+      "data": "20/04/2026 14:42:38",
+      "tipo": "Funzionalità",
+      "modulo": "NODE",
+      "titolo": "prova",
+      "descrizione": "asasdawrewrew  afafasdasda adsa dadasa dadadasda",
+      "internalTicket": "pp-pp00",
+      "clientTicket": "giovannino",
+      "commitAuthor": "cammoranesi",
+      "commitDesc": "provazza",
+      "commitDate": "2026-04-20 14:42:00",
+      "commitHash": "67981ee56f6c51ac47e1daf35f7debd25c91ddcb",
+      "excludedFromReleaseNote": false
+    },
+    {
+      "data": "20/04/2026 14:43:14",
+      "tipo": "",
+      "modulo": "",
+      "descrizione": "un commit diverso tanto per fare la prova",
+      "commitAuthor": "cammoranesi",
+      "commitDesc": "provazza",
+      "commitDate": "2026-04-20 14:42:00",
+      "commitHash": "67981ee56f6c51ac47e1daf35f7debd25c91ddcb",
+      "excludedFromReleaseNote": true
     }
   ]
 }
