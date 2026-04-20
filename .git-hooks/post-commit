@@ -1,8 +1,7 @@
 #!/bin/bash
 # post-commit hook
-# Updates release_notes.json with the actual commit hash.
-# Runs after the commit is created, so the hash is now available.
-# Amends the commit transparently to include the updated hash.
+# Updates release_notes.json replacing PENDING hashes with the real commit hash.
+# Only updates entries whose commitDate matches the current commit session.
 
 REPO_ROOT=$(git rev-parse --show-toplevel)
 RELEASE_NOTES_JSON="$REPO_ROOT/release_notes.json"
@@ -16,19 +15,26 @@ if ! grep -q '"PENDING"' "$RELEASE_NOTES_JSON" 2>/dev/null; then
     exit 0
 fi
 
-# Get the commit hash that was just created
+# Get the actual commit hash
 COMMIT_HASH=$(git rev-parse HEAD)
 
-# Replace all "PENDING" with the actual hash
-if [[ "$(uname)" == "Darwin" ]]; then
-    sed -i '' "s/\"PENDING\"/\"$COMMIT_HASH\"/g" "$RELEASE_NOTES_JSON"
-else
-    sed -i "s/\"PENDING\"/\"$COMMIT_HASH\"/g" "$RELEASE_NOTES_JSON"
+# Find the release-notes binary
+RELEASE_TOOL=""
+if command -v release-notes &> /dev/null; then
+    RELEASE_TOOL="release-notes"
+elif [ -f "$REPO_ROOT/release-notes" ]; then
+    RELEASE_TOOL="$REPO_ROOT/release-notes"
 fi
 
+if [ -z "$RELEASE_TOOL" ]; then
+    # Fallback: can't update hash without the tool, leave PENDING
+    exit 0
+fi
+
+# Let the binary handle the update (only touches entries with matching session ID)
+"$RELEASE_TOOL" --update-hash "$COMMIT_HASH" --output "$RELEASE_NOTES_JSON"
+
 # Amend the commit to include the updated file
-# --no-verify skips all hooks (avoids re-triggering pre-commit)
-# --no-edit keeps the original commit message
 git add "$RELEASE_NOTES_JSON"
 git commit --amend --no-edit --no-verify > /dev/null 2>&1
 

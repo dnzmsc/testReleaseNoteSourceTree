@@ -46,6 +46,18 @@
       "commitDate": "2026-04-20 11:52:48",
       "commitHash": "88458d103c0d0ea6ba87eb421d64cc6c26cbd555",
       "excludedFromReleaseNote": false
+    },
+    {
+      "data": "20/04/2026 14:34:16",
+      "tipo": "Funzionalità",
+      "modulo": "CORE",
+      "titolo": "test",
+      "descrizione": "ererer asdas a asdasda adadas",
+      "commitAuthor": "cammoranesi",
+      "commitDesc": "test",
+      "commitDate": "2026-04-20 14:33:51",
+      "commitHash": "PENDING:1776688431619189000",
+      "excludedFromReleaseNote": false
     }
   ]
 }

@@ -20,6 +20,11 @@ import (
 // Version is set at build time via ldflags.
 var Version = "dev"
 
+// Placeholder prefix used to mark entries that need their hash updated.
+// The full placeholder is "PENDING:<sessionID>" so post-commit can target
+// only the entries created in this specific commit session.
+const pendingPrefix = "PENDING:"
+
 // Release represents a single release note entry.
 type Release struct {
 	Data                    string `json:"data"`
@@ -45,6 +50,7 @@ func main() {
 	commitMsgFile := ""
 	outputFile := "release_notes.json"
 	modulesFile := "modules.json"
+	updateHash := ""
 
 	args := os.Args[1:]
 	for i := 0; i < len(args); i++ {
@@ -64,12 +70,27 @@ func main() {
 				modulesFile = args[i+1]
 				i++
 			}
+		case "--update-hash":
+			if i+1 < len(args) {
+				updateHash = args[i+1]
+				i++
+			}
 		case "--version":
 			fmt.Printf("release-notes %s\n", Version)
 			os.Exit(0)
 		}
 	}
 
+	// --update-hash mode: replace PENDING:<session> placeholders with the real hash
+	if updateHash != "" {
+		if err := replacePendingHashes(outputFile, updateHash); err != nil {
+			fmt.Fprintf(os.Stderr, "Errore aggiornamento hash: %v\n", err)
+			os.Exit(1)
+		}
+		os.Exit(0)
+	}
+
+	// Normal mode: show the GUI
 	modules, err := loadModules(modulesFile)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Errore caricamento moduli: %v\n", err)
@@ -78,13 +99,55 @@ func main() {
 
 	author, commitDesc, commitDate := getGitInfo(commitMsgFile)
 
-	exitCode := showReleaseForm(modules, author, commitDesc, commitDate, outputFile)
+	// Generate a unique session ID for this commit session
+	sessionID := fmt.Sprintf("%d", time.Now().UnixNano())
+
+	exitCode := showReleaseForm(modules, author, commitDesc, commitDate, outputFile, sessionID)
 	os.Exit(exitCode)
 }
 
+// replacePendingHashes reads the JSON file and replaces all commitHash values
+// that start with "PENDING:" with the actual commit hash.
+func replacePendingHashes(filePath, realHash string) error {
+	content, err := os.ReadFile(filePath)
+	if err != nil {
+		return err
+	}
+
+	var relFile ReleaseFile
+	if err := json.Unmarshal(content, &relFile); err != nil {
+		return err
+	}
+
+	changed := false
+	for i := range relFile.Releases {
+		if strings.HasPrefix(relFile.Releases[i].CommitHash, pendingPrefix) {
+			relFile.Releases[i].CommitHash = realHash
+			changed = true
+		}
+	}
+
+	if !changed {
+		return nil
+	}
+
+	out, err := json.MarshalIndent(relFile, "", "  ")
+	if err != nil {
+		return err
+	}
+
+	tmpFile := filePath + ".tmp"
+	if err := os.WriteFile(tmpFile, out, 0644); err != nil {
+		return err
+	}
+
+	return os.Rename(tmpFile, filePath)
+}
+
 // showReleaseForm displays the GUI. Returns 0 if at least one note was saved, 1 otherwise.
-func showReleaseForm(modules []string, author, commitDesc, commitDate, outputFile string) int {
+func showReleaseForm(modules []string, author, commitDesc, commitDate, outputFile, sessionID string) int {
 	noteCount := 0
+	placeholder := pendingPrefix + sessionID
 
 	a := app.New()
 	w := a.NewWindow("📝 Release Notes")
@@ -92,10 +155,8 @@ func showReleaseForm(modules []string, author, commitDesc, commitDate, outputFil
 	w.SetFixedSize(true)
 	w.CenterOnScreen()
 
-	// Closing the window without having saved at least one note = abort
 	w.SetCloseIntercept(func() {
 		if noteCount == 0 {
-			// No notes saved yet — confirm abort
 			dialog.ShowConfirm(
 				"Annullare il commit?",
 				"Non hai salvato nessuna nota di rilascio.\nIl commit verrà annullato.",
@@ -111,24 +172,20 @@ func showReleaseForm(modules []string, author, commitDesc, commitDate, outputFil
 		}
 	})
 
-	// --- Header ---
 	header := widget.NewLabelWithStyle(
 		"Nuova Nota di Rilascio",
 		fyne.TextAlignCenter,
 		fyne.TextStyle{Bold: true},
 	)
 
-	// --- Git info card ---
 	gitInfoCard := widget.NewCard("Dettagli Commit", "", container.NewVBox(
 		widget.NewRichTextFromMarkdown(fmt.Sprintf("**Autore:** %s", author)),
 		widget.NewRichTextFromMarkdown(fmt.Sprintf("**Data:** %s", commitDate)),
 		widget.NewRichTextFromMarkdown(fmt.Sprintf("**Messaggio:** %s", truncate(commitDesc, 80))),
 	))
 
-	// --- Status label (shows how many notes saved so far) ---
 	statusLabel := widget.NewLabelWithStyle("", fyne.TextAlignCenter, fyne.TextStyle{Italic: true})
 
-	// --- Form fields ---
 	excludedCheck := widget.NewCheck("Escludi dalla Nota di Rilascio", nil)
 
 	tipiOptions := []string{"Funzionalità", "Correzione Bug", "Refactoring", "Documentazione", "Generico"}
@@ -153,7 +210,6 @@ func showReleaseForm(modules []string, author, commitDesc, commitDate, outputFil
 
 	errorLabel := widget.NewLabelWithStyle("", fyne.TextAlignCenter, fyne.TextStyle{Bold: true})
 
-	// --- Reset form helper ---
 	resetForm := func() {
 		excludedCheck.SetChecked(false)
 		tipoSelect.ClearSelected()
@@ -171,7 +227,6 @@ func showReleaseForm(modules []string, author, commitDesc, commitDate, outputFil
 		descEntry.PlaceHolder = "Descrizione dettagliata (min. 20 caratteri)..."
 	}
 
-	// --- Excluded checkbox logic ---
 	excludedCheck.OnChanged = func(checked bool) {
 		if checked {
 			tipoSelect.Disable()
@@ -190,7 +245,6 @@ func showReleaseForm(modules []string, author, commitDesc, commitDate, outputFil
 		}
 	}
 
-	// --- Save logic ---
 	saveNote := func() bool {
 		isExcluded := excludedCheck.Checked
 		description := strings.TrimSpace(descEntry.Text)
@@ -211,7 +265,7 @@ func showReleaseForm(modules []string, author, commitDesc, commitDate, outputFil
 			CommitAuthor:            author,
 			CommitDesc:              commitDesc,
 			CommitDate:              commitDate,
-			CommitHash:              "PENDING",
+			CommitHash:              placeholder,
 			ExcludedFromReleaseNote: isExcluded,
 		}
 
@@ -225,17 +279,12 @@ func showReleaseForm(modules []string, author, commitDesc, commitDate, outputFil
 		return true
 	}
 
-	// --- Buttons ---
-	// "Completa Commit" — visible only after saving at least one note.
-	// Closes the window and lets the commit proceed.
 	completeBtn := widget.NewButtonWithIcon("Completa Commit", theme.ConfirmIcon(), func() {
 		w.Close()
 	})
 	completeBtn.Importance = widget.HighImportance
 	completeBtn.Hide()
 
-	// "Salva Nota" — saves the current note, resets the form for another.
-	// After saving, "Completa Commit" becomes visible.
 	saveBtn := widget.NewButtonWithIcon("Salva Nota", theme.DocumentSaveIcon(), func() {
 		if saveNote() {
 			resetForm()
@@ -244,7 +293,6 @@ func showReleaseForm(modules []string, author, commitDesc, commitDate, outputFil
 	})
 	saveBtn.Importance = widget.HighImportance
 
-	// "Annulla Commit" — aborts the commit.
 	cancelBtn := widget.NewButtonWithIcon("Annulla Commit", theme.CancelIcon(), func() {
 		if noteCount == 0 {
 			w.Close()
@@ -263,7 +311,6 @@ func showReleaseForm(modules []string, author, commitDesc, commitDate, outputFil
 		}
 	})
 
-	// --- Layout ---
 	form := container.NewVBox(
 		gitInfoCard,
 		widget.NewSeparator(),
