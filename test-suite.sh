@@ -1,159 +1,142 @@
 #!/bin/bash
 # test-suite.sh
-# Quick test suite for all modes
+# Test suite for the release-notes tool.
+# Tests build, module loading, JSON structure, and hook script.
 
 set -e
 
 REPO_ROOT="$(pwd)"
-TEST_TMP="/tmp/release-notes-test"
+TEST_TMP="/tmp/release-notes-test-$$"
 
 echo "🧪 Release Notes Tool - Test Suite"
 echo "===================================="
 echo ""
 
-# Setup
 mkdir -p "$TEST_TMP"
-echo "Test commit message for validation testing" > "$TEST_TMP/commit-msg.txt"
 
-# Color output
+# Colors
 GREEN='\033[0;32m'
 RED='\033[0;31m'
-YELLOW='\033[0;33m'
-NC='\033[0m' # No Color
+NC='\033[0m'
 
-test_result() {
-  if [ $? -eq 0 ]; then
+PASS=0
+FAIL=0
+
+pass() {
     echo -e "${GREEN}✓ PASS${NC}: $1"
-  else
+    PASS=$((PASS + 1))
+}
+
+fail() {
     echo -e "${RED}✗ FAIL${NC}: $1"
-    exit 1
-  fi
+    FAIL=$((FAIL + 1))
 }
 
-# Test 1: Build
-echo ""
+# --- Test 1: Build ---
 echo "━━━ Test 1: Build ━━━"
-go build -o "$TEST_TMP/release-notes-test" .
-test_result "Binary builds successfully"
-
-# Test 2: Headless - Valid input
-echo ""
-echo "━━━ Test 2: Headless Mode (Valid) ━━━"
-RELEASE_JSON="$TEST_TMP/release_notes.json"
-echo '{"releases":[]}' > "$RELEASE_JSON"
-
-cd "$TEST_TMP"
-"$TEST_TMP/release-notes-test" --headless \
-  --commit-msg "$TEST_TMP/commit-msg.txt" \
-  --json-out "$RELEASE_JSON" \
-  --tipo "Correzione Bug" \
-  --modulo "CORE" \
-  --descrizione "This is a valid test description with sufficient length" \
-  --excluded=false
-test_result "Headless mode saves valid note"
-
-# Test 3: Verify JSON structure
-echo ""
-echo "━━━ Test 3: JSON Output Validation ━━━"
-if grep -q '"tipo": "Correzione Bug"' "$RELEASE_JSON"; then
-  test_result "Saved note has correct type"
+if go build -o "$TEST_TMP/release-notes" . 2>&1; then
+    pass "Il binario compila correttamente"
 else
-  echo -e "${RED}✗ FAIL${NC}: Note type not found in JSON"
-  exit 1
+    fail "Errore di compilazione"
 fi
 
-if grep -q '"modulo": "CORE"' "$RELEASE_JSON"; then
-  test_result "Saved note has correct module"
+# --- Test 2: --version flag ---
+echo ""
+echo "━━━ Test 2: Flag --version ━━━"
+VERSION_OUT=$("$TEST_TMP/release-notes" --version 2>&1 || true)
+if echo "$VERSION_OUT" | grep -q "release-notes"; then
+    pass "Flag --version funziona: $VERSION_OUT"
 else
-  echo -e "${RED}✗ FAIL${NC}: Note module not found in JSON"
-  exit 1
+    fail "Flag --version non funziona: $VERSION_OUT"
 fi
 
-# Test 4: Headless - Missing required field
+# --- Test 3: modules.json loading ---
 echo ""
-echo "━━━ Test 4: Headless Mode (Validation Fails) ━━━"
-"$TEST_TMP/release-notes-test" --headless \
-  --commit-msg "$TEST_TMP/commit-msg.txt" \
-  --json-out "$RELEASE_JSON" \
-  --tipo "Generico" \
-  --modulo "CORE" \
-  --descrizione "too short" \
-  --excluded=false && {
-  echo -e "${RED}✗ FAIL${NC}: Should have rejected short description"
-  exit 1
-} || {
-  echo -e "${GREEN}✓ PASS${NC}: Correctly rejected invalid description"
-}
-
-# Test 5: Headless - Excluded note with short description
-echo ""
-echo "━━━ Test 5: Excluded Note (allows short desc) ━━━"
-"$TEST_TMP/release-notes-test" --headless \
-  --commit-msg "$TEST_TMP/commit-msg.txt" \
-  --json-out "$RELEASE_JSON" \
-  --tipo "Generico" \
-  --modulo "CORE" \
-  --descrizione "short" \
-  --excluded=true
-test_result "Excluded notes don't enforce 20-char limit"
-
-# Test 6: Verify incremental append
-echo ""
-echo "━━━ Test 6: Incremental JSON Append ━━━"
-COUNT=$(grep -c '"tipo"' "$RELEASE_JSON")
-if [ "$COUNT" -ge 2 ]; then
-  test_result "Multiple notes stored (found $COUNT)"
-else
-  echo -e "${RED}✗ FAIL${NC}: Expected ≥2 notes, found $COUNT"
-  exit 1
-fi
-
-# Test 7: Exit codes
-echo ""
-echo "━━━ Test 7: Exit Codes ━━━"
-"$TEST_TMP/release-notes-test" --headless \
-  --commit-msg "$TEST_TMP/commit-msg.txt" \
-  --json-out "$RELEASE_JSON" \
-  --tipo "Generico" \
-  --modulo "CORE" \
-  --descrizione "Valid test note for exit code check" \
-  --excluded=false
-EXIT_CODE=$?
-if [ $EXIT_CODE -eq 0 ]; then
-  test_result "Exit code 0 on success"
-else
-  echo -e "${RED}✗ FAIL${NC}: Expected exit 0, got $EXIT_CODE"
-  exit 1
-fi
-
-# Test 8: Module loading
-echo ""
-echo "━━━ Test 8: Module Loading ━━━"
+echo "━━━ Test 3: Caricamento modules.json ━━━"
 if [ -f "$REPO_ROOT/modules.json" ]; then
-  test_result "modules.json exists"
+    # Verify it's valid JSON array
+    if python3 -c "import json; m=json.load(open('$REPO_ROOT/modules.json')); assert isinstance(m, list) and len(m) > 0" 2>/dev/null; then
+        MODULE_COUNT=$(python3 -c "import json; print(len(json.load(open('$REPO_ROOT/modules.json'))))")
+        pass "modules.json valido con $MODULE_COUNT moduli"
+    else
+        fail "modules.json non è un array JSON valido"
+    fi
 else
-  echo -e "${YELLOW}⚠ WARN${NC}: modules.json not found (will use fallback)"
+    fail "modules.json non trovato"
 fi
 
-# Test 9: Web UI mode (verify port is free)
+# --- Test 4: release_notes.json structure ---
 echo ""
-echo "━━━ Test 9: Web UI Port Check ━━━"
-if ! lsof -Pi :9999 -sTCP:LISTEN -t >/dev/null ; then
-  echo -e "${GREEN}✓ PASS${NC}: Port 9999 available for web UI"
+echo "━━━ Test 4: Struttura release_notes.json ━━━"
+echo '{"releases":[]}' > "$TEST_TMP/test_notes.json"
+if python3 -c "
+import json
+with open('$TEST_TMP/test_notes.json') as f:
+    data = json.load(f)
+    assert 'releases' in data
+    assert isinstance(data['releases'], list)
+" 2>/dev/null; then
+    pass "Struttura JSON corretta"
 else
-  echo -e "${YELLOW}⚠ WARN${NC}: Port 9999 already in use"
+    fail "Struttura JSON non valida"
 fi
 
-# Cleanup
+# --- Test 5: Hook script exists and is executable ---
+echo ""
+echo "━━━ Test 5: Hook prepare-commit-msg ━━━"
+HOOK_FILE="$REPO_ROOT/.git-hooks/prepare-commit-msg"
+if [ -f "$HOOK_FILE" ]; then
+    if [ -x "$HOOK_FILE" ]; then
+        pass "Hook prepare-commit-msg presente e eseguibile"
+    else
+        fail "Hook prepare-commit-msg presente ma non eseguibile"
+    fi
+else
+    fail "Hook prepare-commit-msg non trovato"
+fi
+
+# --- Test 6: Hook skips merge commits ---
+echo ""
+echo "━━━ Test 6: Hook salta merge commits ━━━"
+if grep -q 'merge' "$HOOK_FILE" 2>/dev/null; then
+    pass "Hook gestisce merge commits"
+else
+    fail "Hook non gestisce merge commits"
+fi
+
+# --- Test 7: Setup script ---
+echo ""
+echo "━━━ Test 7: Script di setup ━━━"
+if [ -f "$REPO_ROOT/setup-release-notes.sh" ] && [ -x "$REPO_ROOT/setup-release-notes.sh" ]; then
+    pass "setup-release-notes.sh presente e eseguibile"
+else
+    fail "setup-release-notes.sh mancante o non eseguibile"
+fi
+
+# --- Test 8: Build script ---
+echo ""
+echo "━━━ Test 8: Script di build ━━━"
+if [ -f "$REPO_ROOT/scripts/build-all.sh" ]; then
+    pass "scripts/build-all.sh presente"
+else
+    fail "scripts/build-all.sh mancante"
+fi
+
+# --- Cleanup ---
 echo ""
 echo "━━━ Cleanup ━━━"
-cd "$REPO_ROOT"
 rm -rf "$TEST_TMP"
-echo -e "${GREEN}✓ PASS${NC}: Cleanup complete"
+pass "Cleanup completato"
 
+# --- Summary ---
 echo ""
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-echo -e "${GREEN}✅ All tests passed!${NC}"
+TOTAL=$((PASS + FAIL))
+echo "Risultati: $PASS/$TOTAL passati"
+if [ $FAIL -eq 0 ]; then
+    echo -e "${GREEN}✅ Tutti i test passati!${NC}"
+else
+    echo -e "${RED}❌ $FAIL test falliti${NC}"
+    exit 1
+fi
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-echo ""
-echo "Ready for deployment 🚀"

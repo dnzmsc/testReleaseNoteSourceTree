@@ -1,6 +1,14 @@
 #!/bin/bash
 # build-all.sh
-# Cross-compile for all platforms
+# Cross-compile the release-notes binary for all platforms.
+#
+# Fyne requires CGO, so cross-compilation needs a C cross-compiler
+# for each target platform. For simplicity, build natively on each
+# target OS, or use this script on the current platform only.
+#
+# Usage:
+#   ./scripts/build-all.sh [version]
+#   ./scripts/build-all.sh 1.0.0
 
 set -e
 
@@ -12,45 +20,44 @@ echo "=================================================="
 
 mkdir -p "$OUTPUT_DIR"
 
-# Array of platforms
-platforms=(
-  "darwin:amd64:macos-x86_64"
-  "darwin:arm64:macos-arm64"
-  "linux:amd64:linux-x86_64"
-  "linux:arm64:linux-arm64"
-  "windows:amd64:windows-x86_64"
-)
+# Detect current platform
+CURRENT_OS=$(uname -s | tr '[:upper:]' '[:lower:]')
+CURRENT_ARCH=$(uname -m)
 
-for platform in "${platforms[@]}"; do
-  IFS=":" read -r os arch osLabel <<< "$platform"
-  
-  echo ""
-  echo "🔨 Building for $os/$arch..."
-  
-  output_name="release-notes-$osLabel"
-  [ "$os" = "windows" ] && output_name="$output_name.exe"
-  
-  GOOS=$os GOARCH=$arch go build \
+case "$CURRENT_ARCH" in
+    x86_64)  CURRENT_ARCH="amd64" ;;
+    arm64)   CURRENT_ARCH="arm64" ;;
+    aarch64) CURRENT_ARCH="arm64" ;;
+esac
+
+case "$CURRENT_OS" in
+    darwin) OS_LABEL="macos" ;;
+    linux)  OS_LABEL="linux" ;;
+    *)      OS_LABEL="$CURRENT_OS" ;;
+esac
+
+OUTPUT_NAME="release-notes-${OS_LABEL}-${CURRENT_ARCH}"
+
+echo ""
+echo "🔨 Building for $CURRENT_OS/$CURRENT_ARCH..."
+
+CGO_ENABLED=1 go build \
     -ldflags="-s -w -X main.Version=$VERSION" \
-    -o "$OUTPUT_DIR/$output_name" \
+    -o "$OUTPUT_DIR/$OUTPUT_NAME" \
     .
-  
-  # Create archive
-  cd "$OUTPUT_DIR"
-  if [ "$os" = "windows" ]; then
-    zip -q "release-notes-$osLabel.zip" "$output_name"
-    echo "✓ $osLabel → release-notes-$osLabel.zip"
-  else
-    tar -czf "release-notes-$osLabel.tar.gz" "$output_name"
-    echo "✓ $osLabel → release-notes-$osLabel.tar.gz"
-  fi
-  cd ..
-done
+
+echo "✓ Built: $OUTPUT_DIR/$OUTPUT_NAME"
+
+# Create archive
+if command -v tar &> /dev/null; then
+    tar -czf "$OUTPUT_DIR/$OUTPUT_NAME.tar.gz" -C "$OUTPUT_DIR" "$OUTPUT_NAME"
+    echo "✓ Archive: $OUTPUT_DIR/$OUTPUT_NAME.tar.gz"
+fi
 
 echo ""
 echo "✅ Build complete!"
-echo "📂 Artifacts in: $OUTPUT_DIR/"
+echo "📂 Output: $OUTPUT_DIR/"
 echo ""
-echo "To distribute:"
-echo "  • Upload $OUTPUT_DIR/*.tar.gz and *.zip to GitHub Releases"
-echo "  • Or copy individual binaries to system PATH"
+echo "Nota: Fyne richiede CGO, quindi la cross-compilation necessita"
+echo "di un cross-compiler C. Per build multi-piattaforma, compila"
+echo "nativamente su ogni sistema operativo target."

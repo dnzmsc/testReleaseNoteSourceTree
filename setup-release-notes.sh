@@ -1,89 +1,76 @@
 #!/bin/bash
 # setup-release-notes.sh
-# One-time setup script for developers
-# This script installs the release-notes hook globally for all Git repositories
+# Configura il git hook prepare-commit-msg per un repository specifico.
+#
+# Uso:
+#   cd /path/to/your/repo
+#   /path/to/setup-release-notes.sh
+#
+# Prerequisiti:
+#   - Il binario "release-notes" deve essere nel PATH di sistema
+#   - Il repository deve avere un file modules.json (opzionale, usa default se assente)
 
 set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-TOOL_PATH="$SCRIPT_DIR/release-notes"
 
-echo "📝 Release Notes Hook Setup"
-echo "=========================="
+echo "📝 Setup Release Notes Hook"
+echo "============================"
+echo ""
 
-# Check if binary exists
-if [ ! -f "$TOOL_PATH" ]; then
-  echo "❌ Error: release-notes binary not found at $TOOL_PATH"
-  echo "Please build it first: cd $SCRIPT_DIR && go build -o release-notes ."
-  exit 1
+# Verify we're inside a git repository
+if ! git rev-parse --show-toplevel &> /dev/null; then
+    echo "❌ Errore: non sei dentro un repository Git."
+    echo "   Esegui questo script dalla root di un repository."
+    exit 1
 fi
 
-# Determine OS
-OS=$(uname -s)
-case "$OS" in
-  Linux*)   SCRIPT_EXT="" ;;
-  Darwin*)  SCRIPT_EXT="" ;;
-  MINGW*)   SCRIPT_EXT=".bat" ;;
-  MSYS*)    SCRIPT_EXT=".bat" ;;
-  *)        SCRIPT_EXT="" ;;
-esac
+REPO_ROOT=$(git rev-parse --show-toplevel)
+HOOKS_DIR="$REPO_ROOT/.git/hooks"
 
-# Setup Git template directory (cross-platform)
-if [[ "$OS" == "MINGW"* ]] || [[ "$OS" == "MSYS"* ]]; then
-  # Windows
-  GIT_TEMPLATE_DIR="$APPDATA\Git\templates\hooks"
-else
-  # macOS / Linux
-  GIT_TEMPLATE_DIR="$HOME/.git-templates/hooks"
+# Check that the binary is available
+if ! command -v release-notes &> /dev/null; then
+    echo "⚠️  Il binario 'release-notes' non è nel PATH."
+    echo "   Assicurati che i sistemisti lo abbiano installato."
+    echo "   Continuo comunque con l'installazione dell'hook..."
+    echo ""
 fi
 
-echo "Setting up Git template at: $GIT_TEMPLATE_DIR"
-mkdir -p "$GIT_TEMPLATE_DIR"
+# Install the prepare-commit-msg hook
+echo "Installazione hook in: $HOOKS_DIR"
+mkdir -p "$HOOKS_DIR"
 
-# Copy hooks to template directory
-echo "Installing hooks..."
-cp "$SCRIPT_DIR/.git-hooks/prepare-commit-msg.new" "$GIT_TEMPLATE_DIR/prepare-commit-msg"
-cp "$SCRIPT_DIR/.git-hooks/pre-commit.new" "$GIT_TEMPLATE_DIR/pre-commit"
-chmod +x "$GIT_TEMPLATE_DIR/prepare-commit-msg"
-chmod +x "$GIT_TEMPLATE_DIR/pre-commit"
-
-# Copy binary to a location in PATH or use absolute reference
-if [[ "$OS" == "MINGW"* ]] || [[ "$OS" == "MSYS"* ]]; then
-  # Windows: copy to Local AppData or Git bin
-  DEST="$APPDATA\release-notes.exe"
-  cp "$TOOL_PATH.exe" "$DEST" 2>/dev/null || cp "$TOOL_PATH" "$DEST"
-  echo "Binary installed at: $DEST"
-  echo "⚠️  Make sure this directory is in your PATH"
-else
-  # macOS / Linux: copy to /usr/local/bin or ~/.local/bin
-  if [ -w "/usr/local/bin" ]; then
-    sudo cp "$TOOL_PATH" "/usr/local/bin/release-notes"
-    echo "Binary installed at: /usr/local/bin/release-notes"
-  else
-    mkdir -p "$HOME/.local/bin"
-    cp "$TOOL_PATH" "$HOME/.local/bin/release-notes"
-    if [[ ":$PATH:" != *":$HOME/.local/bin:"* ]]; then
-      echo ""
-      echo "⚠️  Add ~/.local/bin to your PATH by adding this to ~/.bashrc or ~/.zshrc:"
-      echo "export PATH=\"\$HOME/.local/bin:\$PATH\""
-    fi
-  fi
+# Backup existing hook if present
+if [ -f "$HOOKS_DIR/prepare-commit-msg" ]; then
+    BACKUP="$HOOKS_DIR/prepare-commit-msg.bak.$(date +%Y%m%d%H%M%S)"
+    cp "$HOOKS_DIR/prepare-commit-msg" "$BACKUP"
+    echo "  ↳ Hook esistente salvato in: $BACKUP"
 fi
 
-# Configure Git to use template directory
-git config --global init.templatedir "$GIT_TEMPLATE_DIR"
+# Copy the hook
+cp "$SCRIPT_DIR/.git-hooks/prepare-commit-msg" "$HOOKS_DIR/prepare-commit-msg"
+chmod +x "$HOOKS_DIR/prepare-commit-msg"
+echo "  ✓ Hook prepare-commit-msg installato"
+
+# Create release_notes.json if missing
+if [ ! -f "$REPO_ROOT/release_notes.json" ]; then
+    echo '{"releases":[]}' > "$REPO_ROOT/release_notes.json"
+    echo "  ✓ File release_notes.json creato"
+fi
+
+# Create modules.json if missing
+if [ ! -f "$REPO_ROOT/modules.json" ]; then
+    echo '["Default"]' > "$REPO_ROOT/modules.json"
+    echo "  ✓ File modules.json creato (modifica con i moduli del tuo progetto)"
+fi
 
 echo ""
-echo "✅ Setup complete!"
+echo "✅ Setup completato!"
 echo ""
-echo "Next steps:"
-echo "1. For NEW repositories:"
-echo "   git init"
+echo "Prossimi passi:"
+echo "  1. Modifica modules.json con i moduli del tuo progetto"
+echo "  2. Aggiungi modules.json e release_notes.json al repository"
+echo "  3. Prova con: git commit --allow-empty -m 'test release notes'"
 echo ""
-echo "2. For EXISTING repositories (run once in each repo):"
-echo "   rm -rf .git/hooks && git init"
-echo "   OR manually copy hooks:"
-echo "   cp -r $GIT_TEMPLATE_DIR/* your-repo/.git/hooks/"
-echo ""
-echo "Test it:"
-echo "   cd your-repo && git commit --allow-empty -m 'test'"
+echo "Per disinstallare:"
+echo "  rm $HOOKS_DIR/prepare-commit-msg"

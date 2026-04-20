@@ -4,132 +4,23 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
-	"strings"
-	"time"
-
-	"fyne.io/fyne/v2/app"
-	"fyne.io/fyne/v2/container"
-	"fyne.io/fyne/v2/dialog"
-	"fyne.io/fyne/v2/widget"
-	"fyne.io/fyne/v2"
-)
-
-type Release struct {
-	Data        string `json:"data"`
-	Tipo        string `json:"tipo"`
-	Titolo      string `json:"titolo"`
-	Descrizione string `json:"descrizione"`
-	Autore      string `json:"autore"`
-	PR          string `json:"pr"`
-	Changelog   string `json:"changelog"`
-}
-
-type ReleaseFile struct {
-	Releases []Release `json:"releases"`
-}
-
-func main() {
-	a := app.New()
-	w := a.NewWindow("Release Notes")
-	w.Resize(fyne.NewSize(500, 600))
-
-	// Campi del form
-	tipi := []string{"Feature", "Fix", "Refactor"}
-	tipo := widget.NewSelect(tipi, nil)
-	titolo := widget.NewEntry()
-	descrizione := widget.NewMultiLineEntry()
-	autore := widget.NewEntry()
-	pr := widget.NewEntry()
-	changelog := widget.NewMultiLineEntry()
-
-	// Bottone
-	saveBtn := widget.NewButton("Salva", func() {
-		// Validazioni
-		if tipo.Selected == "" {
-			dialog.ShowError(fmt.Errorf("Tipo non selezionato"), w)
-			return
-		}
-		if len(titolo.Text) < 3 {
-			dialog.ShowError(fmt.Errorf("Titolo troppo corto"), w)
-			return
-		}
-		if len(descrizione.Text) < 10 {
-			dialog.ShowError(fmt.Errorf("Descrizione troppo corta"), w)
-			return
-		}
-		if !strings.HasPrefix(pr.Text, "PR") || len(pr.Text) < 3 {
-			dialog.ShowError(fmt.Errorf("PR deve iniziare con 'PR'"), w)
-			return
-		}
-
-		// Crea la release
-		release := Release{
-			Data:        time.Now().Format("2006-01-02"),
-			Tipo:        tipo.Selected,
-			Titolo:      strings.TrimSpace(titolo.Text),
-			Descrizione: strings.TrimSpace(descrizione.Text),
-			Autore:      strings.TrimSpace(autore.Text),
-			PR:          strings.TrimSpace(pr.Text),
-			Changelog:   strings.TrimSpace(changelog.Text),
-		}
-
-		filePath := "release_notes.json"
-		var relFile ReleaseFile
-
-		// Carica se esiste
-		if content, err := os.ReadFile(filePath); err == nil {
-			_ = json.Unmarshal(content, &relFile)
-		}
-
-		// Aggiunge nuova nota
-		relFile.Releases = append(relFile.Releases, release)
-
-		// Salva
-		if out, err := json.MarshalIndent(relFile, "", "  "); err == nil {
-			os.WriteFile(filePath, out, 0644)
-			dialog.ShowInformation("Successo", "Release salvata correttamente!", w)
-			a.Quit()
-		} else {
-			dialog.ShowError(fmt.Errorf("Errore nel salvataggio: %v", err), w)
-		}
-	})
-
-	// Layout
-	form := container.NewVBox(
-		widget.NewLabel("Tipo:"), tipo,
-		widget.NewLabel("Titolo:"), titolo,
-		widget.NewLabel("Descrizione:"), descrizione,
-		widget.NewLabel("Autore:"), autore,
-		widget.NewLabel("PR (es: PR1234):"), pr,
-		widget.NewLabel("Changelog:"), changelog,
-		saveBtn,
-	)
-
-	w.SetContent(form)
-	w.ShowAndRun()
-}
-package main
-
-import (
-	"encoding/json"
-	"flag"
-	"fmt"
-	"net/http"
-	"os"
 	"os/exec"
-	"os/signal"
 	"strings"
-	"syscall"
 	"time"
 
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/app"
 	"fyne.io/fyne/v2/container"
 	"fyne.io/fyne/v2/dialog"
+	"fyne.io/fyne/v2/layout"
+	"fyne.io/fyne/v2/theme"
 	"fyne.io/fyne/v2/widget"
 )
 
-// Release rappresenta la struttura di una singola nota di rilascio.
+// Version is set at build time via ldflags
+var Version = "dev"
+
+// Release represents a single release note entry.
 type Release struct {
 	Data                    string `json:"data"`
 	Tipo                    string `json:"tipo"`
@@ -145,957 +36,327 @@ type Release struct {
 	ExcludedFromReleaseNote bool   `json:"excludedFromReleaseNote"`
 }
 
-// ReleaseFile è la struttura per il file JSON che contiene tutte le release.
+// ReleaseFile is the JSON structure containing all release notes.
 type ReleaseFile struct {
 	Releases []Release `json:"releases"`
 }
 
-// Global context per web server
-type AppContext struct {
-	modules                []string
-	commitAuthor           string
-	commitDesc             string
-	commitDateRaw          string
-	commitHash             string
-	releasesFilePath       string
-	noteSaved              bool
-	modulesFilePath        string
+func main() {
+	// Usage: release-notes --commit-msg <path> [--output <path>] [--modules <path>]
+	// Typically invoked by the prepare-commit-msg git hook.
+
+	commitMsgFile := ""
+	outputFile := "release_notes.json"
+	modulesFile := "modules.json"
+
+	// Simple flag parsing (no flag package to keep control over exit codes)
+	args := os.Args[1:]
+	for i := 0; i < len(args); i++ {
+		switch args[i] {
+		case "--commit-msg":
+			if i+1 < len(args) {
+				commitMsgFile = args[i+1]
+				i++
+			}
+		case "--output":
+			if i+1 < len(args) {
+				outputFile = args[i+1]
+				i++
+			}
+		case "--modules":
+			if i+1 < len(args) {
+				modulesFile = args[i+1]
+				i++
+			}
+		case "--version":
+			fmt.Printf("release-notes %s\n", Version)
+			os.Exit(0)
+		}
+	}
+
+	// Load modules configuration
+	modules, err := loadModules(modulesFile)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Errore caricamento moduli: %v\n", err)
+		os.Exit(1)
+	}
+
+	// Get git data for this commit
+	author, commitDesc, commitDate := getGitInfo(commitMsgFile)
+
+	// Show the GUI and get the result
+	saved := showReleaseForm(modules, author, commitDesc, commitDate, outputFile)
+
+	if saved {
+		// Stage the release_notes.json so it's included in this commit
+		stageFile(outputFile)
+		os.Exit(0)
+	}
+
+	// User cancelled or closed the window → abort the commit
+	os.Exit(1)
 }
 
-// ===== FUNZIONI PURE (riutilizzabili in Fyne e Web) =====
+// showReleaseForm displays the Fyne GUI and returns true if the user saved a note.
+func showReleaseForm(modules []string, author, commitDesc, commitDate, outputFile string) bool {
+	saved := false
 
-// loadModules carica i moduli da un file JSON esterno
-func loadModules(filePath string) ([]string, error) {
-	content, err := os.ReadFile(filePath)
-	if err != nil {
-		if os.IsNotExist(err) {
-			fmt.Printf("File moduli non trovato: %s. Utilizzo moduli di default.\n", filePath)
-			return []string{"Default Module"}, nil
+	a := app.New()
+	w := a.NewWindow("📝 Release Notes")
+	w.Resize(fyne.NewSize(620, 720))
+	w.SetFixedSize(true)
+	w.CenterOnScreen()
+
+	// Closing the window without saving = abort
+	w.SetCloseIntercept(func() {
+		w.Close()
+	})
+
+	// --- Header ---
+	header := widget.NewLabelWithStyle(
+		"Nuova Nota di Rilascio",
+		fyne.TextAlignCenter,
+		fyne.TextStyle{Bold: true},
+	)
+
+	// --- Git info card ---
+	gitInfoCard := widget.NewCard("Dettagli Commit", "", container.NewVBox(
+		widget.NewRichTextFromMarkdown(fmt.Sprintf("**Autore:** %s", author)),
+		widget.NewRichTextFromMarkdown(fmt.Sprintf("**Data:** %s", commitDate)),
+		widget.NewRichTextFromMarkdown(fmt.Sprintf("**Messaggio:** %s", truncate(commitDesc, 80))),
+	))
+
+	// --- Form fields ---
+	excludedCheck := widget.NewCheck("Escludi dalla Nota di Rilascio", nil)
+
+	tipiOptions := []string{"Funzionalità", "Correzione Bug", "Refactoring", "Documentazione", "Generico"}
+	tipoSelect := widget.NewSelect(tipiOptions, nil)
+	tipoSelect.PlaceHolder = "Seleziona Tipo..."
+
+	moduloSelect := widget.NewSelect(modules, nil)
+	moduloSelect.PlaceHolder = "Seleziona Modulo..."
+
+	titoloEntry := widget.NewEntry()
+	titoloEntry.PlaceHolder = "Titolo breve (facoltativo)"
+
+	descEntry := widget.NewMultiLineEntry()
+	descEntry.PlaceHolder = "Descrizione dettagliata (min. 20 caratteri)..."
+	descEntry.SetMinRowsVisible(4)
+
+	internalTicketEntry := widget.NewEntry()
+	internalTicketEntry.PlaceHolder = "Es: PROJ-123"
+
+	clientTicketEntry := widget.NewEntry()
+	clientTicketEntry.PlaceHolder = "Es: CLI-456"
+
+	// --- Excluded checkbox logic ---
+	excludedCheck.OnChanged = func(checked bool) {
+		if checked {
+			tipoSelect.Disable()
+			moduloSelect.Disable()
+			titoloEntry.Disable()
+			internalTicketEntry.Disable()
+			clientTicketEntry.Disable()
+			descEntry.PlaceHolder = "Motivo dell'esclusione..."
+		} else {
+			tipoSelect.Enable()
+			moduloSelect.Enable()
+			titoloEntry.Enable()
+			internalTicketEntry.Enable()
+			clientTicketEntry.Enable()
+			descEntry.PlaceHolder = "Descrizione dettagliata (min. 20 caratteri)..."
 		}
-		return nil, fmt.Errorf("errore nella lettura del file moduli: %w", err)
 	}
-	var modules []string
-	err = json.Unmarshal(content, &modules)
-	if err != nil {
-		return nil, fmt.Errorf("errore nel parsing del file moduli: %w", err)
-	}
-	return modules, nil
+
+	// --- Error label ---
+	errorLabel := widget.NewLabelWithStyle("", fyne.TextAlignCenter, fyne.TextStyle{Bold: true})
+
+	// --- Buttons ---
+	saveBtn := widget.NewButtonWithIcon("Salva e Committa", theme.DocumentSaveIcon(), func() {
+		isExcluded := excludedCheck.Checked
+		description := strings.TrimSpace(descEntry.Text)
+
+		// Validation
+		if errMsg := validateForm(isExcluded, tipoSelect.Selected, moduloSelect.Selected, description); errMsg != "" {
+			errorLabel.SetText("❌ " + errMsg)
+			return
+		}
+
+		release := Release{
+			Data:                    time.Now().Format("02/01/2006 15:04:05"),
+			Tipo:                    tipoSelect.Selected,
+			Modulo:                  moduloSelect.Selected,
+			Titolo:                  strings.TrimSpace(titoloEntry.Text),
+			Descrizione:             description,
+			InternalTicket:          strings.TrimSpace(internalTicketEntry.Text),
+			ClientTicket:            strings.TrimSpace(clientTicketEntry.Text),
+			CommitAuthor:            author,
+			CommitDesc:              commitDesc,
+			CommitDate:              commitDate,
+			CommitHash:              "PENDING",
+			ExcludedFromReleaseNote: isExcluded,
+		}
+
+		if err := saveRelease(release, outputFile); err != nil {
+			dialog.ShowError(fmt.Errorf("Errore salvataggio: %v", err), w)
+			return
+		}
+
+		saved = true
+		w.Close()
+	})
+	saveBtn.Importance = widget.HighImportance
+
+	cancelBtn := widget.NewButtonWithIcon("Annulla Commit", theme.CancelIcon(), func() {
+		w.Close()
+	})
+
+	// --- Layout ---
+	form := container.NewVBox(
+		gitInfoCard,
+		widget.NewSeparator(),
+		excludedCheck,
+		widget.NewLabel("Tipo *"), tipoSelect,
+		widget.NewLabel("Modulo *"), moduloSelect,
+		widget.NewLabel("Titolo"), titoloEntry,
+		widget.NewLabel("Descrizione / Motivo Esclusione *"), descEntry,
+		widget.NewLabel("Internal Ticket"), internalTicketEntry,
+		widget.NewLabel("Client Ticket"), clientTicketEntry,
+		errorLabel,
+		layout.NewSpacer(),
+		container.NewGridWithColumns(2, cancelBtn, saveBtn),
+	)
+
+	scrollable := container.NewVScroll(form)
+
+	content := container.NewPadded(container.NewBorder(
+		container.NewVBox(header, widget.NewSeparator()),
+		nil, nil, nil,
+		scrollable,
+	))
+
+	w.SetContent(content)
+	w.ShowAndRun()
+
+	return saved
 }
 
-// getGitData recupera i dati rilevanti per il commit attuale
-func getGitData(commitMsgFilePath string) (author, description, date, commitHash string, err error) {
-	cmdAuthor := exec.Command("git", "config", "user.name")
-	outAuthor, err := cmdAuthor.Output()
-	if err != nil {
-		author = os.Getenv("USER")
-		if author == "" {
-			author = os.Getenv("USERNAME")
+// validateForm checks required fields and returns an error message, or "" if valid.
+func validateForm(isExcluded bool, tipo, modulo, description string) string {
+	if isExcluded {
+		if len(description) == 0 {
+			return "Inserisci il motivo dell'esclusione nella descrizione"
 		}
-		if author == "" {
-			author = "Sconosciuto"
-		}
-	} else {
-		author = strings.TrimSpace(string(outAuthor))
+		return ""
 	}
 
-	commitMsgContent, err := os.ReadFile(commitMsgFilePath)
-	if err != nil {
-		return "", "", "", "", fmt.Errorf("errore nella lettura del file del messaggio di commit (%s): %w", commitMsgFilePath, err)
+	if tipo == "" {
+		return "Seleziona un Tipo"
 	}
-	lines := strings.Split(string(commitMsgContent), "\n")
-	var cleanedDescription []string
-	for _, line := range lines {
-		trimmedLine := strings.TrimSpace(line)
-		if !strings.HasPrefix(trimmedLine, "#") && trimmedLine != "" {
-			cleanedDescription = append(cleanedDescription, line)
-		}
+	if modulo == "" {
+		return "Seleziona un Modulo"
 	}
-	description = strings.TrimSpace(strings.Join(cleanedDescription, "\n"))
-
-	cmdDate := exec.Command("git", "log", "-1", "--format=%ci")
-	dateBytes, errDate := cmdDate.Output()
-	if errDate == nil {
-		date = strings.TrimSpace(string(dateBytes))
-	} else {
-		date = time.Now().Format("2006-01-02 15:04:05 -0700")
+	if len(description) < 20 {
+		return "La descrizione deve essere di almeno 20 caratteri"
 	}
-
-	cmdHash := exec.Command("git", "rev-parse", "HEAD")
-	outHash, errHash := cmdHash.Output()
-	if errHash != nil {
-		commitHash = "Sconosciuto"
-	} else {
-		commitHash = strings.TrimSpace(string(outHash))
-	}
-
-	return author, description, date, commitHash, nil
+	return ""
 }
 
-// ValidateAndSaveRelease valida i dati e salva in release_notes.json
-func ValidateAndSaveRelease(release Release, releasesFilePath string) error {
-	isExcluded := release.ExcludedFromReleaseNote
-
-	if !isExcluded {
-		if release.Tipo == "" {
-			return fmt.Errorf("Tipo non selezionato")
-		}
-		if release.Modulo == "" {
-			return fmt.Errorf("Modulo non selezionato")
-		}
-		if len(strings.TrimSpace(release.Descrizione)) < 20 {
-			return fmt.Errorf("Descrizione troppo corta (minimo 20 caratteri, spazi esclusi)")
-		}
-	} else {
-		if strings.TrimSpace(release.Descrizione) == "" {
-			return fmt.Errorf("La Descrizione non può essere vuota")
-		}
-	}
-
+// saveRelease appends a release entry to the JSON file using atomic write.
+func saveRelease(release Release, filePath string) error {
 	var relFile ReleaseFile
-	if content, err := os.ReadFile(releasesFilePath); err == nil {
+
+	if content, err := os.ReadFile(filePath); err == nil {
 		_ = json.Unmarshal(content, &relFile)
-	} else if !os.IsNotExist(err) {
-		return fmt.Errorf("errore nella lettura del file release notes: %w", err)
 	}
 
 	relFile.Releases = append(relFile.Releases, release)
 
 	out, err := json.MarshalIndent(relFile, "", "  ")
 	if err != nil {
-		return fmt.Errorf("errore nella serializzazione JSON: %w", err)
+		return fmt.Errorf("errore serializzazione JSON: %w", err)
 	}
 
-	// Atomic write: scrivi in temp, poi rinomina
-	tmpFile := releasesFilePath + ".tmp"
-	err = os.WriteFile(tmpFile, out, 0644)
-	if err != nil {
-		return fmt.Errorf("errore nella scrittura temporanea: %w", err)
+	// Atomic write: write to temp file, then rename
+	tmpFile := filePath + ".tmp"
+	if err := os.WriteFile(tmpFile, out, 0644); err != nil {
+		return fmt.Errorf("errore scrittura file temporaneo: %w", err)
 	}
 
-	err = os.Rename(tmpFile, releasesFilePath)
-	if err != nil {
+	if err := os.Rename(tmpFile, filePath); err != nil {
+		// Cleanup temp file on rename failure
 		os.Remove(tmpFile)
-		return fmt.Errorf("errore nel rinominare file: %w", err)
+		return fmt.Errorf("errore rinomina file: %w", err)
 	}
 
 	return nil
 }
 
-// openBrowser apre un URL nel browser di default
-func openBrowser(url string) error {
-	var cmd *exec.Cmd
-	switch os.Getenv("GOOS") {
-	case "linux":
-		cmd = exec.Command("xdg-open", url)
-	case "darwin":
-		cmd = exec.Command("open", url)
-	case "windows":
-		cmd = exec.Command("cmd", "/c", "start", url)
-	default:
-		// fallback
-		if os.Getenv("OS") == "Windows_NT" {
-			cmd = exec.Command("cmd", "/c", "start", url)
-		} else {
-			cmd = exec.Command("xdg-open", url)
-		}
-	}
-	return cmd.Start()
-}
-
-// ===== WEB UI EMBEDDED (HTML/CSS/JS) =====
-
-const webUIHTML = `
-<!DOCTYPE html>
-<html lang="it">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Note di Rilascio</title>
-  <style>
-    * {
-      margin: 0;
-      padding: 0;
-      box-sizing: border-box;
-    }
-    body {
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
-      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-      min-height: 100vh;
-      display: flex;
-      justify-content: center;
-      align-items: center;
-      padding: 20px;
-    }
-    .container {
-      background: white;
-      border-radius: 12px;
-      box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
-      max-width: 600px;
-      width: 100%;
-      padding: 40px;
-    }
-    h1 {
-      color: #333;
-      margin-bottom: 10px;
-      font-size: 28px;
-    }
-    .status {
-      color: #666;
-      font-size: 14px;
-      margin-bottom: 30px;
-    }
-    .form-group {
-      margin-bottom: 25px;
-    }
-    label {
-      display: block;
-      margin-bottom: 8px;
-      color: #333;
-      font-weight: 600;
-      font-size: 14px;
-    }
-    .required::after {
-      content: " *";
-      color: #e74c3c;
-    }
-    input[type="text"],
-    input[type="email"],
-    select,
-    textarea {
-      width: 100%;
-      padding: 12px 14px;
-      border: 1px solid #e0e0e0;
-      border-radius: 6px;
-      font-size: 14px;
-      font-family: inherit;
-      transition: border-color 0.3s, box-shadow 0.3s;
-    }
-    input[type="text"]:focus,
-    select:focus,
-    textarea:focus {
-      outline: none;
-      border-color: #667eea;
-      box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
-    }
-    textarea {
-      resize: vertical;
-      min-height: 100px;
-      font-family: monospace;
-      font-size: 13px;
-    }
-    .checkbox-group {
-      display: flex;
-      align-items: center;
-      margin-bottom: 20px;
-    }
-    input[type="checkbox"] {
-      width: 20px;
-      height: 20px;
-      cursor: pointer;
-      margin-right: 10px;
-    }
-    .checkbox-label {
-      margin: 0;
-      font-weight: 500;
-      color: #333;
-      cursor: pointer;
-    }
-    .commit-details {
-      background: #f8f9fa;
-      border-left: 4px solid #667eea;
-      padding: 15px;
-      margin-bottom: 25px;
-      border-radius: 4px;
-      font-size: 13px;
-    }
-    .commit-details-item {
-      margin-bottom: 10px;
-    }
-    .commit-details-label {
-      font-weight: 600;
-      color: #555;
-    }
-    .commit-details-value {
-      color: #888;
-      word-break: break-all;
-      font-family: monospace;
-      margin-top: 3px;
-    }
-    .buttons {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 15px;
-      margin-top: 30px;
-    }
-    button {
-      padding: 12px 20px;
-      border: none;
-      border-radius: 6px;
-      font-size: 14px;
-      font-weight: 600;
-      cursor: pointer;
-      transition: all 0.3s;
-    }
-    .btn-primary {
-      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-      color: white;
-    }
-    .btn-primary:hover {
-      transform: translateY(-2px);
-      box-shadow: 0 10px 20px rgba(102, 126, 234, 0.3);
-    }
-    .btn-secondary {
-      background: #e0e0e0;
-      color: #333;
-    }
-    .btn-secondary:hover {
-      background: #d0d0d0;
-    }
-    .error {
-      color: #e74c3c;
-      font-size: 13px;
-      margin-top: 6px;
-    }
-    .success {
-      background: #d4edda;
-      border: 1px solid #c3e6cb;
-      color: #155724;
-      padding: 15px;
-      border-radius: 6px;
-      margin-bottom: 20px;
-    }
-    .hidden {
-      display: none !important;
-    }
-  </style>
-</head>
-<body>
-  <div class="container">
-    <h1>📝 Note di Rilascio</h1>
-    <p class="status">Compila il modulo per il tuo commit</p>
-
-    <div id="successMsg" class="success hidden">✓ Nota salvata correttamente!</div>
-
-    <div class="commit-details">
-      <div class="commit-details-item">
-        <div class="commit-details-label">Autore:</div>
-        <div class="commit-details-value" id="commitAuthor"></div>
-      </div>
-      <div class="commit-details-item">
-        <div class="commit-details-label">Data:</div>
-        <div class="commit-details-value" id="commitDate"></div>
-      </div>
-      <div class="commit-details-item">
-        <div class="commit-details-label">Hash:</div>
-        <div class="commit-details-value" id="commitHash"></div>
-      </div>
-      <div class="commit-details-item">
-        <div class="commit-details-label">Messaggio:</div>
-        <div class="commit-details-value" id="commitDesc"></div>
-      </div>
-    </div>
-
-    <form id="releaseForm">
-      <div class="checkbox-group">
-        <input type="checkbox" id="excludedCheckbox">
-        <label class="checkbox-label" for="excludedCheckbox">Escludi dalla Nota di Rilascio</label>
-      </div>
-
-      <div class="form-group">
-        <label for="tipo" class="required">Tipo</label>
-        <select id="tipo" required>
-          <option value="">-- Seleziona --</option>
-        </select>
-        <div class="error" id="tipoError"></div>
-      </div>
-
-      <div class="form-group">
-        <label for="modulo" class="required">Modulo</label>
-        <select id="modulo" required>
-          <option value="">-- Seleziona --</option>
-        </select>
-        <div class="error" id="moduloError"></div>
-      </div>
-
-      <div class="form-group">
-        <label for="titolo">Titolo (facoltativo)</label>
-        <input type="text" id="titolo" placeholder="Titolo breve della nota">
-      </div>
-
-      <div class="form-group">
-        <label for="descrizione" id="descrizioneLabel" class="required">Descrizione (min. 20 caratteri)</label>
-        <textarea id="descrizione" placeholder="Descrivi il cambiamento..."></textarea>
-        <div class="error" id="descrizioneError"></div>
-      </div>
-
-      <div class="form-group">
-        <label for="internalTicket">Numero Ticket Interno (facoltativo)</label>
-        <input type="text" id="internalTicket" placeholder="Es: PROJ-123">
-      </div>
-
-      <div class="form-group">
-        <label for="clientTicket">Numero Ticket Cliente (facoltativo)</label>
-        <input type="text" id="clientTicket" placeholder="Es: CLI-456">
-      </div>
-
-      <div class="buttons">
-        <button type="submit" class="btn-primary">Salva Nota</button>
-        <button type="button" class="btn-secondary" onclick="window.close()">Chiudi</button>
-      </div>
-    </form>
-  </div>
-
-  <script>
-    const tipiOptions = ["Funzionalità", "Correzione Bug", "Refactoring", "Documentazione", "Generico"];
-    let moduliOptions = [];
-    let gitData = {};
-
-    // Fetch initial data
-    fetch('/api/init')
-      .then(r => r.json())
-      .then(data => {
-        gitData = data;
-        moduliOptions = data.modules;
-
-        // Populate selects
-        document.getElementById('commitAuthor').textContent = data.commitAuthor;
-        document.getElementById('commitDate').textContent = data.commitDate;
-        document.getElementById('commitHash').textContent = data.commitHash;
-        document.getElementById('commitDesc').textContent = data.commitDesc;
-
-        const tipoSel = document.getElementById('tipo');
-        tipiOptions.forEach(t => {
-          const opt = document.createElement('option');
-          opt.value = t;
-          opt.textContent = t;
-          tipoSel.appendChild(opt);
-        });
-        tipoSel.value = "Generico";
-
-        const moduloSel = document.getElementById('modulo');
-        moduliOptions.forEach(m => {
-          const opt = document.createElement('option');
-          opt.value = m;
-          opt.textContent = m;
-          moduloSel.appendChild(opt);
-        });
-      })
-      .catch(err => console.error('Init error:', err));
-
-    // Toggle excluded
-    document.getElementById('excludedCheckbox').addEventListener('change', function() {
-      const label = document.getElementById('descrizioneLabel');
-      const tipoSel = document.getElementById('tipo');
-      if (this.checked) {
-        label.textContent = "Descrizione";
-        label.classList.remove('required');
-      } else {
-        label.textContent = "Descrizione (min. 20 caratteri)";
-        label.classList.add('required');
-        if (tipoSel.value === '') {
-          tipoSel.value = "Generico";
-        }
-      }
-    });
-
-    // Form submit
-    document.getElementById('releaseForm').addEventListener('submit', function(e) {
-      e.preventDefault();
-
-      // Clear errors
-      document.querySelectorAll('.error').forEach(el => el.textContent = '');
-
-      const isExcluded = document.getElementById('excludedCheckbox').checked;
-      const tipo = document.getElementById('tipo').value;
-      const modulo = document.getElementById('modulo').value;
-      const descrizione = document.getElementById('descrizione').value.trim();
-
-      if (!isExcluded) {
-        let hasError = false;
-        if (!tipo) {
-          document.getElementById('tipoError').textContent = 'Tipo non selezionato';
-          hasError = true;
-        }
-        if (!modulo) {
-          document.getElementById('moduloError').textContent = 'Modulo non selezionato';
-          hasError = true;
-        }
-        if (descrizione.length < 20) {
-          document.getElementById('descrizioneError').textContent = 'Minimo 20 caratteri';
-          hasError = true;
-        }
-        if (hasError) return;
-      } else {
-        if (!descrizione) {
-          document.getElementById('descrizioneError').textContent = 'Non può essere vuota';
-          return;
-        }
-      }
-
-      const payload = {
-        tipo,
-        modulo,
-        titolo: document.getElementById('titolo').value.trim(),
-        descrizione,
-        internalTicket: document.getElementById('internalTicket').value.trim(),
-        clientTicket: document.getElementById('clientTicket').value.trim(),
-        excludedFromReleaseNote: isExcluded
-      };
-
-      fetch('/api/save', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
-      })
-        .then(r => r.json())
-        .then(data => {
-          if (data.success) {
-            document.getElementById('successMsg').classList.remove('hidden');
-            document.getElementById('releaseForm').reset();
-            // Auto-close dopo 2 secondi
-            setTimeout(() => window.close(), 2000);
-          } else {
-            alert('Errore: ' + data.error);
-          }
-        })
-        .catch(err => alert('Errore di salvataggio: ' + err.message));
-    });
-  </script>
-</body>
-</html>
-`
-
-// ===== HTTP HANDLERS PER WEB UI =====
-
-func handleInit(ctx *AppContext) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		
-		// Parse commit date for display
-		parsedTime, _ := time.Parse("2006-01-02 15:04:05 -0700", ctx.commitDateRaw)
-		displayDate := parsedTime.Format("02/01/2006 15:04")
-		
-		json.NewEncoder(w).Encode(map[string]interface{}{
-			"modules":      ctx.modules,
-			"commitAuthor": ctx.commitAuthor,
-			"commitDate":   displayDate,
-			"commitHash":   ctx.commitHash,
-			"commitDesc":   ctx.commitDesc,
-		})
-	}
-}
-
-func handleSave(ctx *AppContext, done chan struct{}) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-
-		var payload struct {
-			Tipo                    string `json:"tipo"`
-			Modulo                  string `json:"modulo"`
-			Titolo                  string `json:"titolo"`
-			Descrizione             string `json:"descrizione"`
-			InternalTicket          string `json:"internalTicket"`
-			ClientTicket            string `json:"clientTicket"`
-			ExcludedFromReleaseNote bool   `json:"excludedFromReleaseNote"`
-		}
-
-		if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
-			json.NewEncoder(w).Encode(map[string]interface{}{
-				"success": false,
-				"error":   "Invalid request",
-			})
-			return
-		}
-
-		release := Release{
-			Data:                    time.Now().Format("02/01/2006 15:04:05"),
-			Tipo:                    payload.Tipo,
-			Modulo:                  payload.Modulo,
-			Titolo:                  payload.Titolo,
-			Descrizione:             payload.Descrizione,
-			InternalTicket:          payload.InternalTicket,
-			ClientTicket:            payload.ClientTicket,
-			CommitAuthor:            ctx.commitAuthor,
-			CommitDesc:              ctx.commitDesc,
-			CommitDate:              ctx.commitDateRaw,
-			CommitHash:              ctx.commitHash,
-			ExcludedFromReleaseNote: payload.ExcludedFromReleaseNote,
-		}
-
-		if err := ValidateAndSaveRelease(release, ctx.releasesFilePath); err != nil {
-			json.NewEncoder(w).Encode(map[string]interface{}{
-				"success": false,
-				"error":   err.Error(),
-			})
-			return
-		}
-
-		ctx.noteSaved = true
-		json.NewEncoder(w).Encode(map[string]interface{}{
-			"success": true,
-		})
-
-		// Signal completion
-		select {
-		case done <- struct{}{}:
-		default:
-		}
-	}
-}
-
-func handleUI(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	w.Write([]byte(webUIHTML))
-}
-
-// ===== MODE: WEB SERVER =====
-
-func runWebMode(commitMsgFile, releasesFile string) error {
-	commitAuthor, commitDesc, commitDateRaw, commitHash, err := getGitData(commitMsgFile)
+// loadModules loads the module list from a JSON file.
+// Returns a default list if the file doesn't exist.
+func loadModules(filePath string) ([]string, error) {
+	content, err := os.ReadFile(filePath)
 	if err != nil {
-		return fmt.Errorf("impossibile recuperare dati Git: %w", err)
-	}
-
-	modules, err := loadModules("modules.json")
-	if err != nil {
-		return fmt.Errorf("impossibile caricare moduli: %w", err)
-	}
-
-	ctx := &AppContext{
-		modules:          modules,
-		commitAuthor:     commitAuthor,
-		commitDesc:       commitDesc,
-		commitDateRaw:    commitDateRaw,
-		commitHash:       commitHash,
-		releasesFilePath: releasesFile,
-		noteSaved:        false,
-		modulesFilePath:  "modules.json",
-	}
-
-	done := make(chan struct{})
-
-	mux := http.NewServeMux()
-	mux.HandleFunc("/", handleUI)
-	mux.HandleFunc("/api/init", handleInit(ctx))
-	mux.HandleFunc("/api/save", handleSave(ctx, done))
-
-	server := &http.Server{
-		Addr:    "127.0.0.1:9999",
-		Handler: mux,
-	}
-
-	// Start server
-	go func() {
-		if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			fmt.Fprintf(os.Stderr, "Server error: %v\n", err)
+		if os.IsNotExist(err) {
+			return []string{"Default"}, nil
 		}
-	}()
-
-	time.Sleep(500 * time.Millisecond)
-
-	// Open browser
-	openBrowser("http://127.0.0.1:9999")
-
-	// Wait for save or signal
-	sigChan := make(chan os.Signal, 1)
-	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
-
-	select {
-	case <-done:
-		server.Close()
-		return nil
-	case <-sigChan:
-		server.Close()
-		if ctx.noteSaved {
-			return nil
-		}
-		return fmt.Errorf("nota non salvata")
+		return nil, fmt.Errorf("errore lettura file moduli: %w", err)
 	}
+
+	var modules []string
+	if err := json.Unmarshal(content, &modules); err != nil {
+		return nil, fmt.Errorf("errore parsing file moduli: %w", err)
+	}
+
+	if len(modules) == 0 {
+		return []string{"Default"}, nil
+	}
+
+	return modules, nil
 }
 
-// ===== MODE: HEADLESS (CLI) =====
-
-func runHeadlessMode(commitMsgFile, releasesFile, tipoVal, moduloVal, descrizioneVal string, excludedVal bool) error {
-	commitAuthor, commitDesc, commitDateRaw, commitHash, err := getGitData(commitMsgFile)
-	if err != nil {
-		return fmt.Errorf("impossibile recuperare dati Git: %w", err)
-	}
-
-	release := Release{
-		Data:                    time.Now().Format("02/01/2006 15:04:05"),
-		Tipo:                    tipoVal,
-		Modulo:                  moduloVal,
-		Descrizione:             descrizioneVal,
-		CommitAuthor:            commitAuthor,
-		CommitDesc:              commitDesc,
-		CommitDate:              commitDateRaw,
-		CommitHash:              commitHash,
-		ExcludedFromReleaseNote: excludedVal,
-	}
-
-	return ValidateAndSaveRelease(release, releasesFile)
-}
-
-// ===== MODE: FYNE GUI (legacy) =====
-
-func runFyneMode(commitMsgFilePath string) error {
-	a := app.New()
-	w := a.NewWindow("Generatore Note di Rilascio")
-	w.Resize(fyne.NewSize(700, 900))
-
-	modules, err := loadModules("modules.json")
-	if err != nil {
-		dialog.ShowError(fmt.Errorf("Errore nel caricamento dei moduli: %v", err), w)
-		return err
-	}
-
-	commitAuthor, commitDesc, commitDateRaw, commitHash, err := getGitData(commitMsgFilePath)
-	if err != nil {
-		dialog.ShowError(fmt.Errorf("Impossibile recuperare i dati del commit: %v", err), w)
-		return err
-	}
-
-	// Form elements
-	excludedFromReleaseNote := widget.NewCheck("Escludi dalla Nota di Rilascio", nil)
-	tipi := []string{"Funzionalità", "Correzione Bug", "Refactoring", "Documentazione", "Generico"}
-	tipo := widget.NewSelect(tipi, nil)
-	tipo.SetSelected("Generico")
-	modulo := widget.NewSelect(modules, nil)
-	titolo := widget.NewEntry()
-	descrizione := widget.NewMultiLineEntry()
-	internalTicket := widget.NewEntry()
-	clientTicket := widget.NewEntry()
-
-	var saveBtn *widget.Button
-	var addNoteBtn *widget.Button
-	var closeBtn *widget.Button
-
-	descrizioneLabel := widget.NewLabel("Descrizione (min. 20 caratteri):")
-
-	commitAuthorLabel := widget.NewLabel(fmt.Sprintf("Autore Commit: %s", commitAuthor))
-	commitHashLabel := widget.NewLabel(fmt.Sprintf("Hash Commit: %s", commitHash))
-	commitDescLabel := widget.NewLabel(fmt.Sprintf("Messaggio Commit: %s", commitDesc))
-
-	var commitDateLabel *widget.Label
-	parsedTime, errParse := time.Parse("2006-01-02 15:04:05 -0700", commitDateRaw)
-	if errParse != nil {
-		commitDateLabel = widget.NewLabel(fmt.Sprintf("Data Commit: %s (Formato non riconosciuto)", commitDateRaw))
+// getGitInfo extracts author, commit message, and date for the current commit.
+func getGitInfo(commitMsgFile string) (author, commitDesc, commitDate string) {
+	// Author from git config
+	if out, err := exec.Command("git", "config", "user.name").Output(); err == nil {
+		author = strings.TrimSpace(string(out))
 	} else {
-		formattedDate := parsedTime.Format("02/01/2006 15:04")
-		commitDateLabel = widget.NewLabel(fmt.Sprintf("Data Commit: %s", formattedDate))
+		author = "Sconosciuto"
 	}
 
-	var isAnyNoteSavedForCurrentCommit bool
-
-	formStatusLabel := widget.NewLabel("Nuova nota: inserisci i dettagli.")
-	formStatusLabel.Alignment = fyne.TextAlignCenter
-	formStatusLabel.TextStyle.Bold = true
-
-	setFormFieldsEnabled := func(enabled bool) {
-		if enabled {
-			tipo.Enable()
-			modulo.Enable()
-			titolo.Enable()
-			descrizione.Enable()
-			internalTicket.Enable()
-			clientTicket.Enable()
-			excludedFromReleaseNote.Enable()
-		} else {
-			tipo.Disable()
-			modulo.Disable()
-			titolo.Disable()
-			descrizione.Disable()
-			internalTicket.Disable()
-			clientTicket.Disable()
-			excludedFromReleaseNote.Disable()
-		}
-	}
-
-	resetForm := func() {
-		tipo.SetSelected("Generico")
-		modulo.SetSelected("")
-		modulo.Refresh()
-		titolo.SetText("")
-		descrizione.SetText("")
-		internalTicket.SetText("")
-		clientTicket.SetText("")
-		excludedFromReleaseNote.SetChecked(false)
-		formStatusLabel.SetText("Nuova nota: inserisci i dettagli.")
-		formStatusLabel.Refresh()
-		setFormFieldsEnabled(true)
-		saveBtn.Enable()
-		if addNoteBtn != nil {
-			addNoteBtn.Hide()
-		}
-	}
-
-	saveNoteFunc := func() {
-		release := Release{
-			Data:                    time.Now().Format("02/01/2006 15:04:05"),
-			Tipo:                    tipo.Selected,
-			Modulo:                  modulo.Selected,
-			Titolo:                  strings.TrimSpace(titolo.Text),
-			Descrizione:             strings.TrimSpace(descrizione.Text),
-			InternalTicket:          strings.TrimSpace(internalTicket.Text),
-			ClientTicket:            strings.TrimSpace(clientTicket.Text),
-			CommitAuthor:            commitAuthor,
-			CommitDesc:              commitDesc,
-			CommitDate:              commitDateRaw,
-			CommitHash:              commitHash,
-			ExcludedFromReleaseNote: excludedFromReleaseNote.Checked,
-		}
-
-		if err := ValidateAndSaveRelease(release, "release_notes.json"); err != nil {
-			dialog.ShowError(err, w)
-			return
-		}
-
-		isAnyNoteSavedForCurrentCommit = true
-		setFormFieldsEnabled(false)
-		saveBtn.Disable()
-		if addNoteBtn != nil {
-			addNoteBtn.Show()
-		}
-		formStatusLabel.SetText("Nota salvata! Clicca 'Aggiungi Nuova Nota' per inserirne un'altra o 'Chiudi'.")
-		formStatusLabel.Refresh()
-		dialog.ShowInformation("Successo", "Release salvata correttamente!", w)
-	}
-
-	saveBtn = widget.NewButton("Salva", func() {
-		saveNoteFunc()
-	})
-
-	addNoteBtn = widget.NewButton("Aggiungi Nuova Nota", func() {
-		resetForm()
-	})
-	addNoteBtn.Hide()
-
-	closeBtn = widget.NewButton("Chiudi", func() {
-		if !isAnyNoteSavedForCurrentCommit {
-			dialog.ShowConfirm("Attenzione", "Nessuna nota è stata salvata per questo commit. Vuoi chiudere senza salvare?", func(b bool) {
-				if b {
-					os.Exit(1)
+	// Commit message from the file git passes to the hook
+	commitDesc = ""
+	if commitMsgFile != "" {
+		if content, err := os.ReadFile(commitMsgFile); err == nil {
+			var lines []string
+			for _, line := range strings.Split(string(content), "\n") {
+				// Filter out git comment lines
+				if !strings.HasPrefix(strings.TrimSpace(line), "#") {
+					lines = append(lines, line)
 				}
-			}, w)
-		} else {
-			a.Quit()
-		}
-	})
-
-	excludedFromReleaseNote.OnChanged = func(checked bool) {
-		if checked {
-			descrizioneLabel.SetText("Descrizione:")
-		} else {
-			descrizioneLabel.SetText("Descrizione (min. 20 caratteri):")
-			if tipo.Selected == "" {
-				tipo.SetSelected("Generico")
 			}
+			commitDesc = strings.TrimSpace(strings.Join(lines, "\n"))
 		}
-		descrizioneLabel.Refresh()
 	}
 
-	mainFormFields := container.NewVBox(
-		excludedFromReleaseNote,
-		widget.NewLabel("Tipo*"), tipo,
-		widget.NewLabel("Modulo*"), modulo,
-		widget.NewLabel("Titolo (facoltativo):"), titolo,
-		descrizioneLabel,
-		descrizione,
-		widget.NewLabel("Numero Ticket Interno (facoltativo):"), internalTicket,
-		widget.NewLabel("Numero Ticket Cliente (facoltativo):"), clientTicket,
-	)
+	// Current timestamp (the commit hasn't been created yet at hook time)
+	commitDate = time.Now().Format("2006-01-02 15:04:05")
 
-	commitDetailsGroup := widget.NewCard(
-		"Dettagli Commit",
-		"",
-		container.NewVBox(
-			commitAuthorLabel,
-			commitDateLabel,
-			commitHashLabel,
-			commitDescLabel,
-		),
-	)
-
-	formLayout := container.NewVBox(
-		formStatusLabel,
-		mainFormFields,
-		widget.NewSeparator(),
-		commitDetailsGroup,
-		widget.NewSeparator(),
-	)
-
-	contentScroll := container.NewPadded(container.NewVScroll(formLayout))
-
-	buttonContainer := container.NewGridWithColumns(3,
-		saveBtn,
-		addNoteBtn,
-		closeBtn,
-	)
-
-	w.SetContent(container.NewBorder(
-		nil,
-		buttonContainer,
-		nil,
-		nil,
-		contentScroll,
-	))
-
-	excludedFromReleaseNote.OnChanged(excludedFromReleaseNote.Checked)
-	resetForm()
-
-	w.ShowAndRun()
-	return nil
+	return
 }
 
-// ===== MAIN =====
-
-func main() {
-	// Flags
-	servePtr := flag.String("serve", "", "Start web UI server on port (e.g., ':9999')")
-	commitMsgPtr := flag.String("commit-msg", "", "Path to commit message file")
-	releasesPtr := flag.String("json-out", "release_notes.json", "Path to output release_notes.json")
-	headlessPtr := flag.Bool("headless", false, "Run in headless mode (requires other flags)")
-	tipoPtr := flag.String("tipo", "", "Release type (headless mode)")
-	moduloPtr := flag.String("modulo", "", "Module name (headless mode)")
-	descrizionePtr := flag.String("descrizione", "", "Description (headless mode)")
-	excludedPtr := flag.Bool("excluded", false, "Exclude from release notes (headless mode)")
-
-	flag.Parse()
-
-	// Legacy mode: no flags provided
-	if *commitMsgPtr == "" && *servePtr == "" && !*headlessPtr {
-		if len(os.Args) < 2 {
-			fmt.Fprintf(os.Stderr, "Usage:\n")
-			flag.PrintDefaults()
-			os.Exit(1)
-		}
-		commitMsgFile := os.Args[1]
-		if err := runFyneMode(commitMsgFile); err != nil {
-			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
-			os.Exit(1)
-		}
-		return
+// stageFile runs "git add <file>" to include the file in the current commit.
+func stageFile(filePath string) {
+	cmd := exec.Command("git", "add", filePath)
+	if err := cmd.Run(); err != nil {
+		fmt.Fprintf(os.Stderr, "Attenzione: impossibile aggiungere %s al commit: %v\n", filePath, err)
 	}
+}
 
-	// Web UI mode
-	if *servePtr != "" && *commitMsgPtr != "" {
-		if err := runWebMode(*commitMsgPtr, *releasesPtr); err != nil {
-			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
-			os.Exit(1)
-		}
-		return
+// truncate shortens a string to maxLen characters, adding "..." if truncated.
+func truncate(s string, maxLen int) string {
+	if len(s) <= maxLen {
+		return s
 	}
-
-	// Headless mode
-	if *headlessPtr && *commitMsgPtr != "" {
-		if err := runHeadlessMode(*commitMsgPtr, *releasesPtr, *tipoPtr, *moduloPtr, *descrizionePtr, *excludedPtr); err != nil {
-			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
-			os.Exit(1)
-		}
-		return
-	}
-
-	fmt.Fprintf(os.Stderr, "Invalid combination of flags\n")
-	flag.PrintDefaults()
-	os.Exit(1)
+	return s[:maxLen-3] + "..."
 }
