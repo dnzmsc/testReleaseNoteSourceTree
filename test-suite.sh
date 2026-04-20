@@ -98,13 +98,32 @@ else
     fail "Hook prepare-commit-msg mancante o non eseguibile"
 fi
 
+POSTCOMMIT_HOOK="$REPO_ROOT/.git-hooks/post-commit"
+if [ -f "$POSTCOMMIT_HOOK" ] && [ -x "$POSTCOMMIT_HOOK" ]; then
+    pass "Hook post-commit presente e eseguibile"
+else
+    fail "Hook post-commit mancante o non eseguibile"
+fi
+
 # --- Test 6: Hook handles special commit types ---
 echo ""
 echo "━━━ Test 6: Hook gestisce commit speciali ━━━"
 if grep -q 'GIT_REFLOG_ACTION' "$PRECOMMIT_HOOK" 2>/dev/null; then
-    pass "Hook gestisce amend commits"
+    pass "Hook pre-commit gestisce amend commits"
 else
-    fail "Hook non gestisce amend commits"
+    fail "Hook pre-commit non gestisce amend commits"
+fi
+
+if grep -q 'no-verify' "$POSTCOMMIT_HOOK" 2>/dev/null; then
+    pass "Hook post-commit usa --no-verify per evitare loop"
+else
+    fail "Hook post-commit non usa --no-verify"
+fi
+
+if grep -q 'PENDING' "$POSTCOMMIT_HOOK" 2>/dev/null; then
+    pass "Hook post-commit sostituisce PENDING con hash reale"
+else
+    fail "Hook post-commit non gestisce PENDING"
 fi
 
 # --- Test 7: Setup script ---

@@ -1,0 +1,35 @@
+#!/bin/bash
+# post-commit hook
+# Updates release_notes.json with the actual commit hash.
+# Runs after the commit is created, so the hash is now available.
+# Amends the commit transparently to include the updated hash.
+
+REPO_ROOT=$(git rev-parse --show-toplevel)
+RELEASE_NOTES_JSON="$REPO_ROOT/release_notes.json"
+
+# Only proceed if release_notes.json exists and contains PENDING
+if [ ! -f "$RELEASE_NOTES_JSON" ]; then
+    exit 0
+fi
+
+if ! grep -q '"PENDING"' "$RELEASE_NOTES_JSON" 2>/dev/null; then
+    exit 0
+fi
+
+# Get the commit hash that was just created
+COMMIT_HASH=$(git rev-parse HEAD)
+
+# Replace all "PENDING" with the actual hash
+if [[ "$(uname)" == "Darwin" ]]; then
+    sed -i '' "s/\"PENDING\"/\"$COMMIT_HASH\"/g" "$RELEASE_NOTES_JSON"
+else
+    sed -i "s/\"PENDING\"/\"$COMMIT_HASH\"/g" "$RELEASE_NOTES_JSON"
+fi
+
+# Amend the commit to include the updated file
+# --no-verify skips all hooks (avoids re-triggering pre-commit)
+# --no-edit keeps the original commit message
+git add "$RELEASE_NOTES_JSON"
+git commit --amend --no-edit --no-verify > /dev/null 2>&1
+
+exit 0

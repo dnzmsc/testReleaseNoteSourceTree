@@ -9,7 +9,7 @@
       "commitAuthor": "cammoranesi",
       "commitDesc": "test release notes",
       "commitDate": "2026-04-20 11:12:39",
-      "commitHash": "PENDING",
+      "commitHash": "88458d103c0d0ea6ba87eb421d64cc6c26cbd555",
       "excludedFromReleaseNote": false
     },
     {
@@ -20,7 +20,7 @@
       "commitAuthor": "cammoranesi",
       "commitDesc": "test release notes",
       "commitDate": "2026-04-20 11:20:53",
-      "commitHash": "PENDING",
+      "commitHash": "88458d103c0d0ea6ba87eb421d64cc6c26cbd555",
       "excludedFromReleaseNote": true
     },
     {
@@ -32,7 +32,19 @@
       "commitAuthor": "cammoranesi",
       "commitDesc": "test",
       "commitDate": "2026-04-20 11:42:02",
-      "commitHash": "PENDING",
+      "commitHash": "88458d103c0d0ea6ba87eb421d64cc6c26cbd555",
+      "excludedFromReleaseNote": false
+    },
+    {
+      "data": "20/04/2026 11:54:14",
+      "tipo": "Funzionalità",
+      "modulo": "LIBRARY",
+      "titolo": "asdadad",
+      "descrizione": "asdasdada asdadasda dasdasd asdasda",
+      "commitAuthor": "cammoranesi",
+      "commitDesc": "test",
+      "commitDate": "2026-04-20 11:52:48",
+      "commitHash": "88458d103c0d0ea6ba87eb421d64cc6c26cbd555",
       "excludedFromReleaseNote": false
     }
   ]

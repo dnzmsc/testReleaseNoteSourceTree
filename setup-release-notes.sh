@@ -60,6 +60,16 @@ cp "$SCRIPT_DIR/.git-hooks/prepare-commit-msg" "$HOOKS_DIR/prepare-commit-msg"
 chmod +x "$HOOKS_DIR/prepare-commit-msg"
 echo "  ✓ Hook prepare-commit-msg installato"
 
+# Backup and install post-commit hook (updates PENDING hash with real commit hash)
+if [ -f "$HOOKS_DIR/post-commit" ]; then
+    BACKUP="$HOOKS_DIR/post-commit.bak.$(date +%Y%m%d%H%M%S)"
+    cp "$HOOKS_DIR/post-commit" "$BACKUP"
+    echo "  ↳ Hook post-commit esistente salvato in: $BACKUP"
+fi
+cp "$SCRIPT_DIR/.git-hooks/post-commit" "$HOOKS_DIR/post-commit"
+chmod +x "$HOOKS_DIR/post-commit"
+echo "  ✓ Hook post-commit installato"
+
 # Create release_notes.json if missing
 if [ ! -f "$REPO_ROOT/release_notes.json" ]; then
     echo '{"releases":[]}' > "$REPO_ROOT/release_notes.json"
