@@ -11,7 +11,7 @@ if [ ! -f "$RELEASE_NOTES_JSON" ]; then
     exit 0
 fi
 
-if ! grep -q '"PENDING"' "$RELEASE_NOTES_JSON" 2>/dev/null; then
+if ! grep -q '"PENDING:' "$RELEASE_NOTES_JSON" 2>/dev/null; then
     exit 0
 fi
 

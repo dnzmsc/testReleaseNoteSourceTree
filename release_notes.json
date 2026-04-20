@@ -56,8 +56,19 @@
       "commitAuthor": "cammoranesi",
       "commitDesc": "test",
       "commitDate": "2026-04-20 14:33:51",
-      "commitHash": "PENDING:1776688431619189000",
+      "commitHash": "TESTHASH123",
       "excludedFromReleaseNote": false
+    },
+    {
+      "data": "20/04/2026 14:37:50",
+      "tipo": "",
+      "modulo": "",
+      "descrizione": "cacchetta brutta",
+      "commitAuthor": "cammoranesi",
+      "commitDesc": "test",
+      "commitDate": "2026-04-20 14:37:36",
+      "commitHash": "2b7f51f6ef12c9b447fd335d1482dbcba217cd7a",
+      "excludedFromReleaseNote": true
     }
   ]
 }
