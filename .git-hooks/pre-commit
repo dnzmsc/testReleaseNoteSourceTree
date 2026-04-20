@@ -1,0 +1,61 @@
+#!/bin/bash
+# pre-commit hook
+# Launches the release-notes GUI. The user MUST fill in the form
+# or the commit is aborted. The release_notes.json file is staged
+# automatically so it's included in this same commit.
+#
+# pre-commit is the right hook because:
+# - It runs BEFORE the index is finalized
+# - "git add" during pre-commit DOES include files in the commit
+# - It can abort the commit by exiting non-zero
+
+REPO_ROOT=$(git rev-parse --show-toplevel)
+RELEASE_NOTES_JSON="$REPO_ROOT/release_notes.json"
+MODULES_JSON="$REPO_ROOT/modules.json"
+
+# Skip for amend commits (check if HEAD exists and this is an amend)
+# GIT_REFLOG_ACTION contains "amend" during amend operations
+if echo "$GIT_REFLOG_ACTION" | grep -q "amend" 2>/dev/null; then
+    exit 0
+fi
+
+# Ensure release_notes.json exists
+if [ ! -f "$RELEASE_NOTES_JSON" ]; then
+    echo '{"releases":[]}' > "$RELEASE_NOTES_JSON"
+fi
+
+# Find the release-notes binary
+RELEASE_TOOL=""
+if command -v release-notes &> /dev/null; then
+    RELEASE_TOOL="release-notes"
+elif [ -f "$REPO_ROOT/release-notes" ]; then
+    RELEASE_TOOL="$REPO_ROOT/release-notes"
+fi
+
+if [ -z "$RELEASE_TOOL" ]; then
+    echo "❌ Errore: binario 'release-notes' non trovato."
+    echo "   Installalo nel PATH o nella root del repository."
+    exit 1
+fi
+
+# pre-commit doesn't receive the commit message file path,
+# but we can try to read it from COMMIT_EDITMSG if it exists
+COMMIT_MSG_FILE="$REPO_ROOT/.git/COMMIT_EDITMSG"
+
+# Launch the GUI (blocking, modal window)
+"$RELEASE_TOOL" \
+    --output "$RELEASE_NOTES_JSON" \
+    --modules "$MODULES_JSON" \
+    --commit-msg "$COMMIT_MSG_FILE"
+
+EXIT_CODE=$?
+
+if [ $EXIT_CODE -ne 0 ]; then
+    echo "❌ Commit annullato: le note di rilascio sono obbligatorie."
+    exit 1
+fi
+
+# Stage the updated release_notes.json into this commit
+git add "$RELEASE_NOTES_JSON"
+
+exit 0

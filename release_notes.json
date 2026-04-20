@@ -1,1 +1,27 @@
-{"releases":[]}
+{
+  "releases": [
+    {
+      "data": "20/04/2026 11:13:52",
+      "tipo": "Funzionalità",
+      "modulo": "CUSTOMER",
+      "titolo": "Test Release Notes",
+      "descrizione": "Serve per fare un test al release notes con prove complete",
+      "commitAuthor": "cammoranesi",
+      "commitDesc": "test release notes",
+      "commitDate": "2026-04-20 11:12:39",
+      "commitHash": "PENDING",
+      "excludedFromReleaseNote": false
+    },
+    {
+      "data": "20/04/2026 11:21:22",
+      "tipo": "Funzionalità",
+      "modulo": "",
+      "descrizione": "prove varieeeee",
+      "commitAuthor": "cammoranesi",
+      "commitDesc": "test release notes",
+      "commitDate": "2026-04-20 11:20:53",
+      "commitHash": "PENDING",
+      "excludedFromReleaseNote": true
+    }
+  ]
+}

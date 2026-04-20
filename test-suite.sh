@@ -81,27 +81,30 @@ else
     fail "Struttura JSON non valida"
 fi
 
-# --- Test 5: Hook script exists and is executable ---
+# --- Test 5: Hook scripts exist and are executable ---
 echo ""
-echo "━━━ Test 5: Hook prepare-commit-msg ━━━"
-HOOK_FILE="$REPO_ROOT/.git-hooks/prepare-commit-msg"
-if [ -f "$HOOK_FILE" ]; then
-    if [ -x "$HOOK_FILE" ]; then
-        pass "Hook prepare-commit-msg presente e eseguibile"
-    else
-        fail "Hook prepare-commit-msg presente ma non eseguibile"
-    fi
+echo "━━━ Test 5: Hook pre-commit ━━━"
+PRECOMMIT_HOOK="$REPO_ROOT/.git-hooks/pre-commit"
+if [ -f "$PRECOMMIT_HOOK" ] && [ -x "$PRECOMMIT_HOOK" ]; then
+    pass "Hook pre-commit presente e eseguibile"
 else
-    fail "Hook prepare-commit-msg non trovato"
+    fail "Hook pre-commit mancante o non eseguibile"
 fi
 
-# --- Test 6: Hook skips merge commits ---
-echo ""
-echo "━━━ Test 6: Hook salta merge commits ━━━"
-if grep -q 'merge' "$HOOK_FILE" 2>/dev/null; then
-    pass "Hook gestisce merge commits"
+PREPARE_HOOK="$REPO_ROOT/.git-hooks/prepare-commit-msg"
+if [ -f "$PREPARE_HOOK" ] && [ -x "$PREPARE_HOOK" ]; then
+    pass "Hook prepare-commit-msg presente e eseguibile"
 else
-    fail "Hook non gestisce merge commits"
+    fail "Hook prepare-commit-msg mancante o non eseguibile"
+fi
+
+# --- Test 6: Hook handles special commit types ---
+echo ""
+echo "━━━ Test 6: Hook gestisce commit speciali ━━━"
+if grep -q 'GIT_REFLOG_ACTION' "$PRECOMMIT_HOOK" 2>/dev/null; then
+    pass "Hook gestisce amend commits"
+else
+    fail "Hook non gestisce amend commits"
 fi
 
 # --- Test 7: Setup script ---

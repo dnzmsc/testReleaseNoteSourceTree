@@ -1,58 +1,12 @@
 #!/bin/bash
 # prepare-commit-msg hook
-# Launches the release-notes GUI before the commit is finalized.
-# The user MUST fill in the release note form or the commit is aborted.
-#
-# Arguments passed by git:
-#   $1 = path to the commit message file
-#   $2 = source of the commit message (message, template, merge, squash, commit)
-#   $3 = commit hash (only for amend)
+# Ensures release_notes.json exists. The actual GUI logic is in pre-commit.
 
-COMMIT_MSG_FILE="$1"
-COMMIT_SOURCE="$2"
 REPO_ROOT=$(git rev-parse --show-toplevel)
 RELEASE_NOTES_JSON="$REPO_ROOT/release_notes.json"
-MODULES_JSON="$REPO_ROOT/modules.json"
 
-# Skip for merge commits and squash commits (no user interaction expected)
-if [ "$COMMIT_SOURCE" = "merge" ] || [ "$COMMIT_SOURCE" = "squash" ]; then
-    exit 0
-fi
-
-# Ensure release_notes.json exists
 if [ ! -f "$RELEASE_NOTES_JSON" ]; then
     echo '{"releases":[]}' > "$RELEASE_NOTES_JSON"
-fi
-
-# Find the release-notes binary
-RELEASE_TOOL=""
-if command -v release-notes &> /dev/null; then
-    RELEASE_TOOL="release-notes"
-elif [ -f "$REPO_ROOT/release-notes" ]; then
-    RELEASE_TOOL="$REPO_ROOT/release-notes"
-fi
-
-if [ -z "$RELEASE_TOOL" ]; then
-    echo "❌ Errore: binario 'release-notes' non trovato."
-    echo "   Installalo nel PATH o nella root del repository."
-    exit 1
-fi
-
-# Launch the GUI. It will:
-# - Show the form to the user (blocking, modal)
-# - Save the release note to release_notes.json
-# - Stage release_notes.json via "git add"
-# - Exit 0 on success, 1 on cancel/close
-"$RELEASE_TOOL" \
-    --commit-msg "$COMMIT_MSG_FILE" \
-    --output "$RELEASE_NOTES_JSON" \
-    --modules "$MODULES_JSON"
-
-EXIT_CODE=$?
-
-if [ $EXIT_CODE -ne 0 ]; then
-    echo "❌ Commit annullato: le note di rilascio sono obbligatorie."
-    exit 1
 fi
 
 exit 0

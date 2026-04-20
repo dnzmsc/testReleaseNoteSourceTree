@@ -17,7 +17,7 @@ import (
 	"fyne.io/fyne/v2/widget"
 )
 
-// Version is set at build time via ldflags
+// Version is set at build time via ldflags.
 var Version = "dev"
 
 // Release represents a single release note entry.
@@ -42,14 +42,10 @@ type ReleaseFile struct {
 }
 
 func main() {
-	// Usage: release-notes --commit-msg <path> [--output <path>] [--modules <path>]
-	// Typically invoked by the prepare-commit-msg git hook.
-
 	commitMsgFile := ""
 	outputFile := "release_notes.json"
 	modulesFile := "modules.json"
 
-	// Simple flag parsing (no flag package to keep control over exit codes)
 	args := os.Args[1:]
 	for i := 0; i < len(args); i++ {
 		switch args[i] {
@@ -74,42 +70,45 @@ func main() {
 		}
 	}
 
-	// Load modules configuration
 	modules, err := loadModules(modulesFile)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Errore caricamento moduli: %v\n", err)
 		os.Exit(1)
 	}
 
-	// Get git data for this commit
 	author, commitDesc, commitDate := getGitInfo(commitMsgFile)
 
-	// Show the GUI and get the result
-	saved := showReleaseForm(modules, author, commitDesc, commitDate, outputFile)
-
-	if saved {
-		// Stage the release_notes.json so it's included in this commit
-		stageFile(outputFile)
-		os.Exit(0)
-	}
-
-	// User cancelled or closed the window → abort the commit
-	os.Exit(1)
+	exitCode := showReleaseForm(modules, author, commitDesc, commitDate, outputFile)
+	os.Exit(exitCode)
 }
 
-// showReleaseForm displays the Fyne GUI and returns true if the user saved a note.
-func showReleaseForm(modules []string, author, commitDesc, commitDate, outputFile string) bool {
-	saved := false
+// showReleaseForm displays the GUI. Returns 0 if at least one note was saved, 1 otherwise.
+func showReleaseForm(modules []string, author, commitDesc, commitDate, outputFile string) int {
+	noteCount := 0
 
 	a := app.New()
 	w := a.NewWindow("📝 Release Notes")
-	w.Resize(fyne.NewSize(620, 720))
+	w.Resize(fyne.NewSize(620, 750))
 	w.SetFixedSize(true)
 	w.CenterOnScreen()
 
-	// Closing the window without saving = abort
+	// Closing the window without having saved at least one note = abort
 	w.SetCloseIntercept(func() {
-		w.Close()
+		if noteCount == 0 {
+			// No notes saved yet — confirm abort
+			dialog.ShowConfirm(
+				"Annullare il commit?",
+				"Non hai salvato nessuna nota di rilascio.\nIl commit verrà annullato.",
+				func(confirmed bool) {
+					if confirmed {
+						w.Close()
+					}
+				},
+				w,
+			)
+		} else {
+			w.Close()
+		}
 	})
 
 	// --- Header ---
@@ -125,6 +124,9 @@ func showReleaseForm(modules []string, author, commitDesc, commitDate, outputFil
 		widget.NewRichTextFromMarkdown(fmt.Sprintf("**Data:** %s", commitDate)),
 		widget.NewRichTextFromMarkdown(fmt.Sprintf("**Messaggio:** %s", truncate(commitDesc, 80))),
 	))
+
+	// --- Status label (shows how many notes saved so far) ---
+	statusLabel := widget.NewLabelWithStyle("", fyne.TextAlignCenter, fyne.TextStyle{Italic: true})
 
 	// --- Form fields ---
 	excludedCheck := widget.NewCheck("Escludi dalla Nota di Rilascio", nil)
@@ -149,6 +151,26 @@ func showReleaseForm(modules []string, author, commitDesc, commitDate, outputFil
 	clientTicketEntry := widget.NewEntry()
 	clientTicketEntry.PlaceHolder = "Es: CLI-456"
 
+	errorLabel := widget.NewLabelWithStyle("", fyne.TextAlignCenter, fyne.TextStyle{Bold: true})
+
+	// --- Reset form helper ---
+	resetForm := func() {
+		excludedCheck.SetChecked(false)
+		tipoSelect.ClearSelected()
+		moduloSelect.ClearSelected()
+		titoloEntry.SetText("")
+		descEntry.SetText("")
+		internalTicketEntry.SetText("")
+		clientTicketEntry.SetText("")
+		errorLabel.SetText("")
+		tipoSelect.Enable()
+		moduloSelect.Enable()
+		titoloEntry.Enable()
+		internalTicketEntry.Enable()
+		clientTicketEntry.Enable()
+		descEntry.PlaceHolder = "Descrizione dettagliata (min. 20 caratteri)..."
+	}
+
 	// --- Excluded checkbox logic ---
 	excludedCheck.OnChanged = func(checked bool) {
 		if checked {
@@ -168,18 +190,18 @@ func showReleaseForm(modules []string, author, commitDesc, commitDate, outputFil
 		}
 	}
 
-	// --- Error label ---
-	errorLabel := widget.NewLabelWithStyle("", fyne.TextAlignCenter, fyne.TextStyle{Bold: true})
-
 	// --- Buttons ---
-	saveBtn := widget.NewButtonWithIcon("Salva e Committa", theme.DocumentSaveIcon(), func() {
+	// Declared here so saveAndAdd can reference finishBtn and vice versa
+	var saveAndCommitBtn *widget.Button
+	var saveAndAddBtn *widget.Button
+
+	saveNote := func() bool {
 		isExcluded := excludedCheck.Checked
 		description := strings.TrimSpace(descEntry.Text)
 
-		// Validation
 		if errMsg := validateForm(isExcluded, tipoSelect.Selected, moduloSelect.Selected, description); errMsg != "" {
 			errorLabel.SetText("❌ " + errMsg)
-			return
+			return false
 		}
 
 		release := Release{
@@ -199,22 +221,62 @@ func showReleaseForm(modules []string, author, commitDesc, commitDate, outputFil
 
 		if err := saveRelease(release, outputFile); err != nil {
 			dialog.ShowError(fmt.Errorf("Errore salvataggio: %v", err), w)
-			return
+			return false
 		}
 
-		saved = true
+		noteCount++
+		statusLabel.SetText(fmt.Sprintf("✅ %d nota/e salvata/e per questo commit", noteCount))
+		return true
+	}
+
+	// "Save and add another note" button
+	saveAndAddBtn = widget.NewButtonWithIcon("Salva e Aggiungi Altra Nota", theme.ContentAddIcon(), func() {
+		if saveNote() {
+			resetForm()
+		}
+	})
+
+	// "Save and commit" button (saves current note + closes)
+	saveAndCommitBtn = widget.NewButtonWithIcon("Salva e Committa", theme.DocumentSaveIcon(), func() {
+		if saveNote() {
+			w.Close()
+		}
+	})
+	saveAndCommitBtn.Importance = widget.HighImportance
+
+	// "Finish" button — only visible after at least one note is saved
+	finishBtn := widget.NewButtonWithIcon("Completa Commit", theme.ConfirmIcon(), func() {
 		w.Close()
 	})
-	saveBtn.Importance = widget.HighImportance
+	finishBtn.Importance = widget.HighImportance
+	finishBtn.Hide()
 
 	cancelBtn := widget.NewButtonWithIcon("Annulla Commit", theme.CancelIcon(), func() {
-		w.Close()
+		if noteCount == 0 {
+			w.Close()
+		} else {
+			dialog.ShowConfirm(
+				"Annullare il commit?",
+				fmt.Sprintf("Hai già salvato %d nota/e.\nSe annulli, le note resteranno nel file ma il commit non verrà eseguito.", noteCount),
+				func(confirmed bool) {
+					if confirmed {
+						noteCount = 0 // Reset so exit code is 1
+						w.Close()
+					}
+				},
+				w,
+			)
+		}
 	})
 
 	// --- Layout ---
+	buttonRow := container.NewGridWithColumns(2, cancelBtn, saveAndCommitBtn)
+	addAnotherRow := container.NewGridWithColumns(2, saveAndAddBtn, finishBtn)
+
 	form := container.NewVBox(
 		gitInfoCard,
 		widget.NewSeparator(),
+		statusLabel,
 		excludedCheck,
 		widget.NewLabel("Tipo *"), tipoSelect,
 		widget.NewLabel("Modulo *"), moduloSelect,
@@ -224,7 +286,8 @@ func showReleaseForm(modules []string, author, commitDesc, commitDate, outputFil
 		widget.NewLabel("Client Ticket"), clientTicketEntry,
 		errorLabel,
 		layout.NewSpacer(),
-		container.NewGridWithColumns(2, cancelBtn, saveBtn),
+		addAnotherRow,
+		buttonRow,
 	)
 
 	scrollable := container.NewVScroll(form)
@@ -236,12 +299,38 @@ func showReleaseForm(modules []string, author, commitDesc, commitDate, outputFil
 	))
 
 	w.SetContent(content)
+
+	// Use a goroutine-safe way to track note count for button visibility.
+	// We wrap saveNote to also update button visibility.
+	origSaveNote := saveNote
+	saveNote = func() bool {
+		result := origSaveNote()
+		if result && noteCount > 0 {
+			finishBtn.Show()
+		}
+		return result
+	}
+	// Re-bind buttons with the wrapped saveNote
+	saveAndAddBtn.OnTapped = func() {
+		if saveNote() {
+			resetForm()
+		}
+	}
+	saveAndCommitBtn.OnTapped = func() {
+		if saveNote() {
+			w.Close()
+		}
+	}
+
 	w.ShowAndRun()
 
-	return saved
+	if noteCount > 0 {
+		return 0
+	}
+	return 1
 }
 
-// validateForm checks required fields and returns an error message, or "" if valid.
+// validateForm checks required fields. Returns error message or "" if valid.
 func validateForm(isExcluded bool, tipo, modulo, description string) string {
 	if isExcluded {
 		if len(description) == 0 {
@@ -249,7 +338,6 @@ func validateForm(isExcluded bool, tipo, modulo, description string) string {
 		}
 		return ""
 	}
-
 	if tipo == "" {
 		return "Seleziona un Tipo"
 	}
@@ -277,14 +365,12 @@ func saveRelease(release Release, filePath string) error {
 		return fmt.Errorf("errore serializzazione JSON: %w", err)
 	}
 
-	// Atomic write: write to temp file, then rename
 	tmpFile := filePath + ".tmp"
 	if err := os.WriteFile(tmpFile, out, 0644); err != nil {
 		return fmt.Errorf("errore scrittura file temporaneo: %w", err)
 	}
 
 	if err := os.Rename(tmpFile, filePath); err != nil {
-		// Cleanup temp file on rename failure
 		os.Remove(tmpFile)
 		return fmt.Errorf("errore rinomina file: %w", err)
 	}
@@ -293,7 +379,6 @@ func saveRelease(release Release, filePath string) error {
 }
 
 // loadModules loads the module list from a JSON file.
-// Returns a default list if the file doesn't exist.
 func loadModules(filePath string) ([]string, error) {
 	content, err := os.ReadFile(filePath)
 	if err != nil {
@@ -315,22 +400,19 @@ func loadModules(filePath string) ([]string, error) {
 	return modules, nil
 }
 
-// getGitInfo extracts author, commit message, and date for the current commit.
+// getGitInfo extracts author, commit message, and date.
 func getGitInfo(commitMsgFile string) (author, commitDesc, commitDate string) {
-	// Author from git config
 	if out, err := exec.Command("git", "config", "user.name").Output(); err == nil {
 		author = strings.TrimSpace(string(out))
 	} else {
 		author = "Sconosciuto"
 	}
 
-	// Commit message from the file git passes to the hook
 	commitDesc = ""
 	if commitMsgFile != "" {
 		if content, err := os.ReadFile(commitMsgFile); err == nil {
 			var lines []string
 			for _, line := range strings.Split(string(content), "\n") {
-				// Filter out git comment lines
 				if !strings.HasPrefix(strings.TrimSpace(line), "#") {
 					lines = append(lines, line)
 				}
@@ -339,21 +421,11 @@ func getGitInfo(commitMsgFile string) (author, commitDesc, commitDate string) {
 		}
 	}
 
-	// Current timestamp (the commit hasn't been created yet at hook time)
 	commitDate = time.Now().Format("2006-01-02 15:04:05")
-
 	return
 }
 
-// stageFile runs "git add <file>" to include the file in the current commit.
-func stageFile(filePath string) {
-	cmd := exec.Command("git", "add", filePath)
-	if err := cmd.Run(); err != nil {
-		fmt.Fprintf(os.Stderr, "Attenzione: impossibile aggiungere %s al commit: %v\n", filePath, err)
-	}
-}
-
-// truncate shortens a string to maxLen characters, adding "..." if truncated.
+// truncate shortens a string to maxLen characters.
 func truncate(s string, maxLen int) string {
 	if len(s) <= maxLen {
 		return s

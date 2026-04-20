@@ -36,18 +36,26 @@ if ! command -v release-notes &> /dev/null; then
     echo ""
 fi
 
-# Install the prepare-commit-msg hook
+# Install hooks
 echo "Installazione hook in: $HOOKS_DIR"
 mkdir -p "$HOOKS_DIR"
 
-# Backup existing hook if present
+# Backup and install pre-commit hook (launches the GUI, stages release_notes.json)
+if [ -f "$HOOKS_DIR/pre-commit" ]; then
+    BACKUP="$HOOKS_DIR/pre-commit.bak.$(date +%Y%m%d%H%M%S)"
+    cp "$HOOKS_DIR/pre-commit" "$BACKUP"
+    echo "  ↳ Hook pre-commit esistente salvato in: $BACKUP"
+fi
+cp "$SCRIPT_DIR/.git-hooks/pre-commit" "$HOOKS_DIR/pre-commit"
+chmod +x "$HOOKS_DIR/pre-commit"
+echo "  ✓ Hook pre-commit installato"
+
+# Backup and install prepare-commit-msg hook (ensures release_notes.json exists)
 if [ -f "$HOOKS_DIR/prepare-commit-msg" ]; then
     BACKUP="$HOOKS_DIR/prepare-commit-msg.bak.$(date +%Y%m%d%H%M%S)"
     cp "$HOOKS_DIR/prepare-commit-msg" "$BACKUP"
-    echo "  ↳ Hook esistente salvato in: $BACKUP"
+    echo "  ↳ Hook prepare-commit-msg esistente salvato in: $BACKUP"
 fi
-
-# Copy the hook
 cp "$SCRIPT_DIR/.git-hooks/prepare-commit-msg" "$HOOKS_DIR/prepare-commit-msg"
 chmod +x "$HOOKS_DIR/prepare-commit-msg"
 echo "  ✓ Hook prepare-commit-msg installato"
