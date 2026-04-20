@@ -190,11 +190,7 @@ func showReleaseForm(modules []string, author, commitDesc, commitDate, outputFil
 		}
 	}
 
-	// --- Buttons ---
-	// Declared here so saveAndAdd can reference finishBtn and vice versa
-	var saveAndCommitBtn *widget.Button
-	var saveAndAddBtn *widget.Button
-
+	// --- Save logic ---
 	saveNote := func() bool {
 		isExcluded := excludedCheck.Checked
 		description := strings.TrimSpace(descEntry.Text)
@@ -229,28 +225,26 @@ func showReleaseForm(modules []string, author, commitDesc, commitDate, outputFil
 		return true
 	}
 
-	// "Save and add another note" button
-	saveAndAddBtn = widget.NewButtonWithIcon("Salva e Aggiungi Altra Nota", theme.ContentAddIcon(), func() {
-		if saveNote() {
-			resetForm()
-		}
-	})
-
-	// "Save and commit" button (saves current note + closes)
-	saveAndCommitBtn = widget.NewButtonWithIcon("Salva e Committa", theme.DocumentSaveIcon(), func() {
-		if saveNote() {
-			w.Close()
-		}
-	})
-	saveAndCommitBtn.Importance = widget.HighImportance
-
-	// "Finish" button — only visible after at least one note is saved
-	finishBtn := widget.NewButtonWithIcon("Completa Commit", theme.ConfirmIcon(), func() {
+	// --- Buttons ---
+	// "Completa Commit" — visible only after saving at least one note.
+	// Closes the window and lets the commit proceed.
+	completeBtn := widget.NewButtonWithIcon("Completa Commit", theme.ConfirmIcon(), func() {
 		w.Close()
 	})
-	finishBtn.Importance = widget.HighImportance
-	finishBtn.Hide()
+	completeBtn.Importance = widget.HighImportance
+	completeBtn.Hide()
 
+	// "Salva Nota" — saves the current note, resets the form for another.
+	// After saving, "Completa Commit" becomes visible.
+	saveBtn := widget.NewButtonWithIcon("Salva Nota", theme.DocumentSaveIcon(), func() {
+		if saveNote() {
+			resetForm()
+			completeBtn.Show()
+		}
+	})
+	saveBtn.Importance = widget.HighImportance
+
+	// "Annulla Commit" — aborts the commit.
 	cancelBtn := widget.NewButtonWithIcon("Annulla Commit", theme.CancelIcon(), func() {
 		if noteCount == 0 {
 			w.Close()
@@ -260,7 +254,7 @@ func showReleaseForm(modules []string, author, commitDesc, commitDate, outputFil
 				fmt.Sprintf("Hai già salvato %d nota/e.\nSe annulli, le note resteranno nel file ma il commit non verrà eseguito.", noteCount),
 				func(confirmed bool) {
 					if confirmed {
-						noteCount = 0 // Reset so exit code is 1
+						noteCount = 0
 						w.Close()
 					}
 				},
@@ -270,9 +264,6 @@ func showReleaseForm(modules []string, author, commitDesc, commitDate, outputFil
 	})
 
 	// --- Layout ---
-	buttonRow := container.NewGridWithColumns(2, cancelBtn, saveAndCommitBtn)
-	addAnotherRow := container.NewGridWithColumns(2, saveAndAddBtn, finishBtn)
-
 	form := container.NewVBox(
 		gitInfoCard,
 		widget.NewSeparator(),
@@ -286,8 +277,8 @@ func showReleaseForm(modules []string, author, commitDesc, commitDate, outputFil
 		widget.NewLabel("Client Ticket"), clientTicketEntry,
 		errorLabel,
 		layout.NewSpacer(),
-		addAnotherRow,
-		buttonRow,
+		container.NewGridWithColumns(2, cancelBtn, saveBtn),
+		completeBtn,
 	)
 
 	scrollable := container.NewVScroll(form)
@@ -299,29 +290,6 @@ func showReleaseForm(modules []string, author, commitDesc, commitDate, outputFil
 	))
 
 	w.SetContent(content)
-
-	// Use a goroutine-safe way to track note count for button visibility.
-	// We wrap saveNote to also update button visibility.
-	origSaveNote := saveNote
-	saveNote = func() bool {
-		result := origSaveNote()
-		if result && noteCount > 0 {
-			finishBtn.Show()
-		}
-		return result
-	}
-	// Re-bind buttons with the wrapped saveNote
-	saveAndAddBtn.OnTapped = func() {
-		if saveNote() {
-			resetForm()
-		}
-	}
-	saveAndCommitBtn.OnTapped = func() {
-		if saveNote() {
-			w.Close()
-		}
-	}
-
 	w.ShowAndRun()
 
 	if noteCount > 0 {
